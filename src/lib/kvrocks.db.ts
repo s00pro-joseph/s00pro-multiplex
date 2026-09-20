@@ -8,7 +8,7 @@ export class KvrocksStorage extends BaseRedisStorage {
       url: process.env.KVROCKS_URL!,
       clientName: 'Kvrocks'
     };
-    const globalSymbol = Symbol.for('__MOONTV_KVROCKS_CLIENT__');
+    const globalSymbol = Symbol.for('__S00PROTV_KVROCKS_CLIENT__');
     super(config, globalSymbol);
   }
 }

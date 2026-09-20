@@ -242,7 +242,7 @@ export class DatabaseCacheManager {
           const type = key.split('-')[1];
           stats.tmdb.types[type] = (stats.tmdb.types[type] || 0) + 1;
         }
-        else if (key.startsWith('danmu-cache') || key === 'lunatv_danmu_cache') {
+        else if (key.startsWith('danmu-cache') || key === 's00protv_danmu_cache') {
           stats.danmu.count++;
           stats.danmu.size += size;
         }
@@ -323,7 +323,7 @@ export class DatabaseCacheManager {
         key.startsWith('bilibili-search') ||
         key.startsWith('search-') ||
         key.startsWith('cache-') ||
-        key === 'lunatv_danmu_cache'
+        key === 's00protv_danmu_cache'
       );
 
       console.log(`📊 localStorage中找到 ${keys.length} 个相关缓存键`);
@@ -360,7 +360,7 @@ export class DatabaseCacheManager {
           const type = key.split('-')[1];
           stats.tmdb.types[type] = (stats.tmdb.types[type] || 0) + 1;
         }
-        else if (key.startsWith('danmu-cache') || key === 'lunatv_danmu_cache') {
+        else if (key.startsWith('danmu-cache') || key === 's00protv_danmu_cache') {
           stats.danmu.count++;
           stats.danmu.size += size;
         }

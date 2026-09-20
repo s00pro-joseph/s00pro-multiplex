@@ -1,21 +1,21 @@
 {
-  "name": "moontv",
-  "version": "6.6.4",
+  "name": "s00protv",
+  "version": "7.0.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm gen:manifest && next dev -H 0.0.0.0",
-    "build": "pnpm gen:manifest && next build",
-    "start": "next start",
+    "dev": "bun gen:manifest && bun next dev --webpack -p 3333",
+    "build": "bun gen:manifest && bun next build --webpack",
+    "start": "bun next start",
     "lint": "next lint",
-    "lint:fix": "eslint src --fix && pnpm format",
+    "lint:fix": "eslint src --fix && bun format",
     "lint:strict": "eslint --max-warnings=0 src",
     "typecheck": "tsc --noEmit --incremental false",
     "test:watch": "jest --watch",
     "test": "jest --passWithNoTests",
     "format": "prettier -w .",
     "format:check": "prettier -c .",
-    "gen:manifest": "node scripts/generate-manifest.js",
-    "edgeone:build": "node scripts/edgeone-build.mjs",
+    "gen:manifest": "bun scripts/generate-manifest.js",
+    "edgeone:build": "bun scripts/edgeone-build.mjs",
     "postbuild": "echo 'Build completed - sitemap generation disabled'",
     "prepare": "husky install"
   },
@@ -106,11 +106,11 @@
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx}": [
       "eslint --max-warnings=0",
-      "prettier -w"
+      "bun prettier -w"
     ],
     "**/*.{json,css,scss,md,webmanifest}": [
-      "prettier -w"
+      "bun prettier -w"
     ]
   },
-  "packageManager": "pnpm@10.14.0"
+  "packageManager": "bun@1.4.1"
 }

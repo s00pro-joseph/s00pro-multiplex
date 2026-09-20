@@ -17,7 +17,7 @@ import {
 import { UpstashRedisStorage } from './upstash.db';
 import { incrementDbQuery } from './performance-monitor';
 
-// storage type 常量: 'localstorage' | 'redis' | 'upstash'，默认 'localstorage'
+// storage type 常量: 'localstorage' | 'redis' | 'upstash' | 'kvrocks' | 'sqlite'，默认 'sqlite'
 const STORAGE_TYPE =
   (process.env.NEXT_PUBLIC_STORAGE_TYPE as
     | 'localstorage'
@@ -25,7 +25,7 @@ const STORAGE_TYPE =
     | 'upstash'
     | 'kvrocks'
     | 'sqlite'
-    | undefined) || 'localstorage';
+    | undefined) || 'sqlite';
 
 // 创建存储实例
 function createStorage(): IStorage {
@@ -39,7 +39,7 @@ function createStorage(): IStorage {
     case 'sqlite':
       if (process.env.EDGEONE_PAGES === '1') {
         throw new Error(
-          '[LunaTV] SQLite storage is not supported on EdgeOne Pages: the platform has no persistent filesystem. ' +
+          '[s00proTV] SQLite storage is not supported on EdgeOne Pages: the platform has no persistent filesystem. ' +
           'Please set NEXT_PUBLIC_STORAGE_TYPE to "upstash", "redis", or "kvrocks".'
         );
       }

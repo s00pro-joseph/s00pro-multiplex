@@ -22,6 +22,8 @@ module.exports = (phase) => {
     // Next.js 16 使用 Turbopack，配置 SVG 加载
     turbopack: {
       root: __dirname,
+      // Turbopack cannot resolve Bun/Node sqlite builtins; use webpack for dev
+      // to keep sqlite.db.ts working. Production builds also use webpack.
       rules: {
         '*.svg': {
           loaders: ['@svgr/webpack'],

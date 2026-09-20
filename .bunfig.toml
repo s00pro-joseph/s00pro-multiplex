@@ -1,0 +1,7 @@
+install.frozenLockfile = false
+install.withLegacyBrowser = false
+
+[install.scoped]
+"@next" = "next"
+"react" = "react"
+"react-dom" = "react-dom"

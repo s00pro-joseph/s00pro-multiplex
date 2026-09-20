@@ -346,7 +346,7 @@ export interface UserPlayStat {
   avgWatchTime: number; // 平均每次观看时长
   mostWatchedSource: string; // 最常观看的来源
 
-  // 新增LunaTV-alpha的高级统计字段
+  // 新增s00proTV的高级统计字段
   totalMovies?: number; // 观看影片总数（去重）
   firstWatchDate?: number; // 首次观看时间戳
   lastUpdateTime?: number; // 最后更新时间戳

@@ -147,7 +147,7 @@ export default function Error({
                 // 清理可能损坏的缓存
                 const keysToKeep = ['auth-token', 'user-preferences'];
                 for (let key in localStorage) {
-                  if (!keysToKeep.includes(key) && key.startsWith('moontv_')) {
+                  if (!keysToKeep.includes(key) && key.startsWith('s00protv_')) {
                     localStorage.removeItem(key);
                   }
                 }

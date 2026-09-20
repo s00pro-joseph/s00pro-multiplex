@@ -86,7 +86,7 @@ async function getDanmuCacheItem(key: string): Promise<{ data: any[]; timestamp:
 
     // 兜底：从localStorage获取（兼容性）
     if (typeof localStorage !== 'undefined') {
-      const oldCacheKey = 'lunatv_danmu_cache';
+      const oldCacheKey = 's00protv_danmu_cache';
       const localCached = localStorage.getItem(oldCacheKey);
       if (localCached) {
         const parsed = JSON.parse(localCached);
@@ -119,7 +119,7 @@ async function setDanmuCacheItem(key: string, data: any[]): Promise<void> {
     // 兜底存储：localStorage（兼容性，但只存储最近几个）
     if (typeof localStorage !== 'undefined') {
       try {
-        const oldCacheKey = 'lunatv_danmu_cache';
+        const oldCacheKey = 's00protv_danmu_cache';
         let localCache: Map<string, { data: any[]; timestamp: number }> = new Map();
 
         const existing = localStorage.getItem(oldCacheKey);

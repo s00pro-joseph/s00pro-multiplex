@@ -27,7 +27,7 @@ generateManifest();
 require('./server.js');
 
 // 每 1 秒轮询一次，直到请求成功
-const TARGET_URL = `http://${process.env.HOSTNAME || 'localhost'}:${process.env.PORT || 3000
+const TARGET_URL = `http://${process.env.HOSTNAME || 'localhost'}:${process.env.PORT || 3333
   }/login`;
 
 const intervalId = setInterval(() => {
@@ -58,7 +58,7 @@ const intervalId = setInterval(() => {
 
 // 执行 cron 任务的函数
 function executeCronJob() {
-  const cronUrl = `http://${process.env.HOSTNAME || 'localhost'}:${process.env.PORT || 3000
+  const cronUrl = `http://${process.env.HOSTNAME || 'localhost'}:${process.env.PORT || 3333
     }/api/cron`;
 
   console.log(`Executing cron job: ${cronUrl}`);
@@ -72,9 +72,9 @@ function executeCronJob() {
 
     res.on('end', () => {
       if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-        console.log('Cron job executed successfully:', data);
+        console.log('[s00proTV] Cron job executed successfully:', data);
       } else {
-        console.error('Cron job failed:', res.statusCode, data);
+      console.error('[s00proTV] Cron job failed:', res.statusCode, data);
       }
     });
   });

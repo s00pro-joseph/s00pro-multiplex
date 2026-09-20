@@ -8,7 +8,7 @@ export class RedisStorage extends BaseRedisStorage {
       url: process.env.REDIS_URL!,
       clientName: 'Redis'
     };
-    const globalSymbol = Symbol.for('__MOONTV_REDIS_CLIENT__');
+    const globalSymbol = Symbol.for('__S00PROTV_REDIS_CLIENT__');
     super(config, globalSymbol);
   }
 }
