@@ -209,7 +209,7 @@ export default function GlobalError({
                       const keysToKeep = ['auth-token', 'user-preferences'];
                       try {
                         for (let key in localStorage) {
-                          if (!keysToKeep.includes(key) && key.startsWith('moontv_')) {
+                          if (!keysToKeep.includes(key) && key.startsWith('s00protv_')) {
                             localStorage.removeItem(key);
                           }
                         }

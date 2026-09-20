@@ -271,8 +271,8 @@ async function fetchDoubanData(doubanId: number): Promise<any | null> {
   }
 
   try {
-    // 直接导入并调用豆瓣scraper函数（避免HTTP请求，支持Vercel/Docker）
-    const { scrapeDoubanDetails } = await import('@/app/api/douban/details/route');
+    // 直接导入豆瓣scraper函数（避免HTTP请求，支持Vercel/Docker）
+    const { scrapeDoubanDetails } = await import('@/lib/douban-details.server');
 
     const result = await scrapeDoubanDetails(doubanId.toString());
 
@@ -371,7 +371,7 @@ export async function orchestrateDataSources(
   });
 
   // 2. 构建基础系统提示词
-  const siteName = config?.siteName || 'LunaTV';
+  const siteName = config?.siteName || 's00proTV';
   let systemPrompt = `你是 ${siteName} 的 AI 影视助手，专门帮助用户发现和了解影视内容。
 
 ## 你的能力

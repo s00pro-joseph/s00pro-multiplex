@@ -21,7 +21,7 @@ interface SkipPreset {
   endingStart: number;  // 片尾提前时间（秒，剩余模式），0 表示不跳片尾
 }
 
-const SKIP_PRESETS_KEY = 'moontv_skip_presets';
+const SKIP_PRESETS_KEY = 's00protv_skip_presets';
 const MAX_PRESET_COUNT = 20;
 
 function sanitizePresetList(input: unknown[]): SkipPreset[] {
@@ -1027,7 +1027,7 @@ export default function SkipController({
     const a = document.createElement('a');
     const date = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `lunatv-skip-presets-${date}.json`;
+    a.download = `s00protv-skip-presets-${date}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

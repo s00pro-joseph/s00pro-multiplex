@@ -122,7 +122,7 @@ async function fetchRemote(
         headers['User-Agent'] =
           DEFAULT_USER_AGENT; // 国内源友好
       } else if (url.includes('jsdelivr') || url.includes('fastly')) {
-        headers['User-Agent'] = 'LunaTV/1.0'; // CDN 源简洁标识
+        headers['User-Agent'] = 's00proTV/1.0'; // CDN 源简洁标识
       } else {
         headers['User-Agent'] = DEFAULT_USER_AGENT;
       }

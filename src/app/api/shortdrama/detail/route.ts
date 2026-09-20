@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getCacheTime, getConfig } from '@/lib/config';
-import { parseShortDramaEpisode } from '@/lib/shortdrama.client';
+import { parseShortDramaEpisodeServer } from '@/lib/shortdrama.server';
 import { recordRequest, getDbQueryCount, resetDbQueryCount } from '@/lib/performance-monitor';
 
 // 标记为动态路由
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 先尝试指定集数，如果提供了剧名且配置了备用API则自动fallback
-    let result = await parseShortDramaEpisode(
+    let result = await parseShortDramaEpisodeServer(
       videoId,
       episodeNum,
       true,
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     // 如果失败，尝试其他集数
     if (result.code !== 0 || !result.data || !result.data.totalEpisodes) {
-      result = await parseShortDramaEpisode(
+      result = await parseShortDramaEpisodeServer(
         videoId,
         episodeNum === 1 ? 2 : 1,
         true,
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
 
     // 如果还是失败，尝试第0集
     if (result.code !== 0 || !result.data || !result.data.totalEpisodes) {
-      result = await parseShortDramaEpisode(
+      result = await parseShortDramaEpisodeServer(
         videoId,
         0,
         true,

@@ -309,9 +309,10 @@ async function handleAuthentication(
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
 
   if (!process.env.PASSWORD) {
-    // 未设置密码，重定向到警告页面
-    const warningUrl = new URL('/warning', request.url);
-    return NextResponse.redirect(warningUrl);
+    // s00proTV localhost own-use: no PASSWORD set = no auth required.
+    // Allow through instead of redirecting to /warning.
+    // Set PASSWORD env later to re-enable login.
+    return response || NextResponse.next();
   }
 
   if (isWeakDefaultCredential(process.env.PASSWORD)) {

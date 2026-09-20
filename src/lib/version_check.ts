@@ -13,14 +13,14 @@ export enum UpdateStatus {
 
 // 远程版本检查URL配置
 const VERSION_CHECK_URLS = [
-  'https://raw.githubusercontent.com/SzeMeng76/LunaTV/refs/heads/main/VERSION.txt',
+  'https://raw.githubusercontent.com/s00pro-joseph/s00proTV/refs/heads/main/VERSION.txt',
 ];
 
 // ========== 缓存机制 ==========
 
 // 缓存配置
 const CACHE_TTL = 60 * 60 * 1000; // 1小时缓存时间
-const SESSION_STORAGE_KEY = 'lunatv_version_check_cache';
+const SESSION_STORAGE_KEY = 's00protv_version_check_cache';
 
 // 内存缓存
 interface CacheEntry {

@@ -26,7 +26,7 @@ import type { Reminder } from '@/lib/db.client';
 // Constants
 // ============================================================================
 
-const WATCHING_UPDATES_CACHE_KEY = 'moontv_watching_updates';
+const WATCHING_UPDATES_CACHE_KEY = 's00protv_watching_updates';
 
 // ============================================================================
 // Types

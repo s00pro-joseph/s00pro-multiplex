@@ -73,7 +73,7 @@ export const UserMenu: React.FC = () => {
     // 从localStorage加载已忽略的新上映列表
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('moontv_dismissed_releases');
+        const saved = localStorage.getItem('s00protv_dismissed_releases');
         return saved ? new Set(JSON.parse(saved)) : new Set();
       } catch {
         return new Set();
@@ -284,7 +284,7 @@ export const UserMenu: React.FC = () => {
 
     // 保存到localStorage
     try {
-      localStorage.setItem('moontv_dismissed_releases', JSON.stringify([...newDismissed]));
+      localStorage.setItem('s00protv_dismissed_releases', JSON.stringify([...newDismissed]));
     } catch (error) {
       console.error('保存已忽略列表失败:', error);
     }

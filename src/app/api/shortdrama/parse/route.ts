@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getCacheTime, getConfig } from '@/lib/config';
-import { parseShortDramaEpisode } from '@/lib/shortdrama.client';
+import { parseShortDramaEpisodeServer } from '@/lib/shortdrama.server';
 import { recordRequest, getDbQueryCount, resetDbQueryCount } from '@/lib/performance-monitor';
 
 // 标记为动态路由
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 解析视频，默认使用代理，如果提供了剧名且配置了备用API则自动fallback
-    const result = await parseShortDramaEpisode(
+    const result = await parseShortDramaEpisodeServer(
       videoId,
       episodeNum,
       true,

@@ -201,7 +201,7 @@ const DataMigration = ({ onRefreshConfig }: DataMigrationProps) => {
       // 获取文件名
       const contentDisposition = response.headers.get('content-disposition');
       const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
-      const filename = filenameMatch?.[1] || 'moontv-backup.dat';
+      const filename = filenameMatch?.[1] || 's00protv-backup.dat';
 
       // 下载文件
       const blob = await response.blob();

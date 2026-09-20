@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, no-console */
 
 import { getConfig } from './config';
+import { parseWithAlternativeApi } from './shortdrama.client';
 import { DEFAULT_USER_AGENT } from './user-agent';
-import { ShortDramaItem } from './types';
+import { ShortDramaItem, ShortDramaParseResult } from './types';
 
 // 短剧相关分类关键词（父分类 + 子分类标签）
 const SHORT_DRAMA_KEYWORDS = ['短剧', '女频恋爱', '反转爽剧', '古装仙侠', '年代穿越', '脑洞悬疑', '现代都市'];
@@ -151,5 +152,149 @@ export async function getRecommendedShortDramas(
       console.error('默认源也失败:', fallbackError);
       return [];
     }
+  }
+}
+
+// 默认主API地址（与配置缺省值保持一致）
+const DEFAULT_PRIMARY_API = 'https://tyyszyapi.com/api.php/provide/vod';
+
+// 从上游 vod 接口直取单集播放地址（服务端专用）
+// parseShortDramaEpisode（client 版）内部用相对路径回調 /api/shortdrama/parse，
+// 在服务端 fetch 相对 URL 会直接抛 ERR_INVALID_URL，因此路由层改调本函数
+async function fetchPrimaryEpisodeUrl(
+  apiBase: string,
+  id: number,
+  episode: number
+): Promise<ShortDramaParseResult> {
+  const detailUrl = `${apiBase}?ac=videolist&ids=${id}`;
+
+  const response = await fetch(detailUrl, {
+    headers: {
+      'User-Agent': DEFAULT_USER_AGENT,
+      Accept: 'application/json',
+    },
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const item = data?.list?.[0];
+
+  if (!item) {
+    return { code: 1, msg: '未找到该短剧' };
+  }
+
+  // vod_play_url 格式: 分组($$$分隔) > 分集(#分隔) > 标题$地址
+  const firstGroup = String(item.vod_play_url || '').split('$$$')[0] || '';
+  const segments = firstGroup.split('#').filter(Boolean);
+
+  if (segments.length === 0) {
+    return { code: 1, msg: '该短剧暂无可用播放地址' };
+  }
+
+  // episode<=1 取第1集，其余按 episode-1 取索引，并做越界保护
+  const index =
+    episode <= 1 ? 0 : Math.min(episode - 1, segments.length - 1);
+  const segment = segments[index];
+  const url = segment.slice(segment.lastIndexOf('$') + 1).trim();
+
+  if (!url) {
+    return { code: 1, msg: '该集暂时无法播放，请稍后再试' };
+  }
+
+  const parsedUrl = url.replace(/^http:\/\//i, 'https://');
+  const proxyUrl = `/api/proxy/shortdrama?url=${encodeURIComponent(parsedUrl)}`;
+  const currentEpisode = index + 1;
+
+  return {
+    code: 0,
+    data: {
+      videoId: item.vod_id ?? id,
+      videoName: item.vod_name || '',
+      currentEpisode,
+      totalEpisodes: segments.length,
+      parsedUrl,
+      proxyUrl,
+      cover: item.vod_pic || '',
+      description: item.vod_content || item.vod_blurb || '',
+      episode: {
+        index: currentEpisode,
+        label: `第${currentEpisode}集`,
+        parsedUrl,
+        proxyUrl,
+        title: `第${currentEpisode}集`,
+      },
+    },
+  };
+}
+
+// 服务端解析单集（供 /api/shortdrama/parse 与 /detail 路由调用）
+// 保持与 client 版一致的 fallback 顺序：备用API优先（若提供）→ 主API → 备用API兜底
+export async function parseShortDramaEpisodeServer(
+  id: number,
+  episode: number,
+  useProxy = true,
+  dramaName?: string,
+  alternativeApiUrl?: string
+): Promise<ShortDramaParseResult> {
+  if (dramaName && alternativeApiUrl) {
+    console.log('优先尝试备用API...');
+    try {
+      const alternativeResult = await parseWithAlternativeApi(
+        dramaName,
+        episode,
+        alternativeApiUrl
+      );
+      if (alternativeResult.code === 0) {
+        console.log('备用API成功！');
+        return alternativeResult;
+      }
+      console.log('备用API失败，fallback到主API:', alternativeResult.msg);
+    } catch (altError) {
+      console.log('备用API错误，fallback到主API:', altError);
+    }
+  }
+
+  try {
+    let primaryApiUrl = DEFAULT_PRIMARY_API;
+    try {
+      const config = await getConfig();
+      primaryApiUrl =
+        config.ShortDramaConfig?.primaryApiUrl || DEFAULT_PRIMARY_API;
+    } catch (configError) {
+      console.error('读取短剧主API配置失败，使用默认源:', configError);
+    }
+
+    const result = await fetchPrimaryEpisodeUrl(primaryApiUrl, id, episode);
+
+    if (result.code !== 0) {
+      if (dramaName && alternativeApiUrl) {
+        console.log('主API失败，尝试使用备用API...');
+        return await parseWithAlternativeApi(dramaName, episode, alternativeApiUrl);
+      }
+      return result;
+    }
+
+    if (!useProxy && result.data) {
+      result.data.proxyUrl = result.data.parsedUrl;
+      if (result.data.episode) {
+        result.data.episode.proxyUrl = result.data.parsedUrl;
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error('服务端解析短剧集数失败:', error);
+    if (dramaName && alternativeApiUrl) {
+      console.log('主API网络错误，尝试使用备用API...');
+      return await parseWithAlternativeApi(dramaName, episode, alternativeApiUrl);
+    }
+    return {
+      code: -1,
+      msg: '网络连接失败，请检查网络后重试',
+    };
   }
 }

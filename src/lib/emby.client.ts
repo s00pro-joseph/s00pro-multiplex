@@ -109,7 +109,7 @@ export class EmbyClient {
   private embyAuthorizationHeader: string;
 
   private static readonly DEFAULT_AUTHORIZATION_HEADER =
-    'MediaBrowser Client="LunaTV", Device="Web", DeviceId="lunatv-web", Version="1.0.0"';
+    'MediaBrowser Client="s00proTV", Device="Web", DeviceId="s00protv-web", Version="1.0.0"';
 
   constructor(config: EmbyConfig) {
     let serverUrl = config.ServerURL.replace(/\/$/, '');

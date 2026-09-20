@@ -99,14 +99,14 @@ interface UserCacheStore {
 }
 
 // ---- 常量 ----
-const PLAY_RECORDS_KEY = 'moontv_play_records';
-const FAVORITES_KEY = 'moontv_favorites';
-const REMINDERS_KEY = 'moontv_reminders'; // 提醒存储键
-const SEARCH_HISTORY_KEY = 'moontv_search_history';
-const USER_STATS_KEY = 'moontv_user_stats'; // 添加用户统计数据存储键
+const PLAY_RECORDS_KEY = 's00protv_play_records';
+const FAVORITES_KEY = 's00protv_favorites';
+const REMINDERS_KEY = 's00protv_reminders'; // 提醒存储键
+const SEARCH_HISTORY_KEY = 's00protv_search_history';
+const USER_STATS_KEY = 's00protv_user_stats'; // 添加用户统计数据存储键
 
 // 缓存相关常量
-const CACHE_PREFIX = 'moontv_cache_';
+const CACHE_PREFIX = 's00protv_cache_';
 const CACHE_VERSION = '1.0.0';
 const CACHE_EXPIRE_TIME = 60 * 60 * 1000; // 一小时缓存过期
 const PLAY_RECORDS_CACHE_EXPIRE_TIME = 5 * 60 * 1000; // 播放记录5分钟缓存过期，与新集数更新检查保持一致
@@ -266,7 +266,7 @@ class HybridCacheManager {
   private clearAllCache(): void {
     const keys = Object.keys(localStorage);
     keys.forEach((key) => {
-      if (key.startsWith('moontv_cache_')) {
+      if (key.startsWith('s00protv_cache_')) {
         localStorage.removeItem(key);
       }
     });
@@ -1931,7 +1931,7 @@ export async function getSkipConfig(
 
     if (STORAGE_TYPE === 'localstorage') {
       // localStorage 模式
-      const raw = localStorage.getItem('moontv_skip_configs');
+      const raw = localStorage.getItem('s00protv_skip_configs');
       if (!raw) return null;
       const allConfigs = JSON.parse(raw) as Record<string, EpisodeSkipConfig>;
       return allConfigs[key] || null;
@@ -2003,10 +2003,10 @@ export async function saveSkipConfig(
         console.warn('无法在服务端保存跳过配置到 localStorage');
         return;
       }
-      const raw = localStorage.getItem('moontv_skip_configs');
+      const raw = localStorage.getItem('s00protv_skip_configs');
       const configs = raw ? (JSON.parse(raw) as Record<string, EpisodeSkipConfig>) : {};
       configs[key] = config;
-      localStorage.setItem('moontv_skip_configs', JSON.stringify(configs));
+      localStorage.setItem('s00protv_skip_configs', JSON.stringify(configs));
       window.dispatchEvent(
         new CustomEvent('skipConfigsUpdated', {
           detail: configs,
@@ -2107,7 +2107,7 @@ export async function getAllSkipConfigs(): Promise<Record<string, EpisodeSkipCon
 
   // localStorage 模式
   try {
-    const raw = localStorage.getItem('moontv_skip_configs');
+    const raw = localStorage.getItem('s00protv_skip_configs');
     if (!raw) return {};
     return JSON.parse(raw) as Record<string, EpisodeSkipConfig>;
   } catch (err) {
@@ -2134,11 +2134,11 @@ export async function deleteSkipConfig(
         console.warn('无法在服务端删除跳过配置');
         return;
       }
-      const raw = localStorage.getItem('moontv_skip_configs');
+      const raw = localStorage.getItem('s00protv_skip_configs');
       if (raw) {
         const configs = JSON.parse(raw) as Record<string, EpisodeSkipConfig>;
         delete configs[key];
-        localStorage.setItem('moontv_skip_configs', JSON.stringify(configs));
+        localStorage.setItem('s00protv_skip_configs', JSON.stringify(configs));
         window.dispatchEvent(
           new CustomEvent('skipConfigsUpdated', {
             detail: configs,
