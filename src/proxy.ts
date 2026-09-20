@@ -309,7 +309,7 @@ async function handleAuthentication(
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
 
   if (!process.env.PASSWORD) {
-    // s00proTV localhost own-use: no PASSWORD set = no auth required.
+    // s00pro-multiplex localhost own-use: no PASSWORD set = no auth required.
     // Allow through instead of redirecting to /warning.
     // Set PASSWORD env later to re-enable login.
     return response || NextResponse.next();

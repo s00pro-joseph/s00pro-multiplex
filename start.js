@@ -72,9 +72,9 @@ function executeCronJob() {
 
     res.on('end', () => {
       if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-        console.log('[s00proTV] Cron job executed successfully:', data);
+        console.log('[s00pro-multiplex] Cron job executed successfully:', data);
       } else {
-      console.error('[s00proTV] Cron job failed:', res.statusCode, data);
+      console.error('[s00pro-multiplex] Cron job failed:', res.statusCode, data);
       }
     });
   });

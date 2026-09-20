@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
 import nextDynamic from 'next/dynamic';
+import { Inter } from 'next/font/google';
 import { cookies } from 'next/headers';
 import { Suspense } from 'react';
 import { Toaster } from 'sonner';
@@ -11,32 +11,36 @@ import './globals.css';
 
 import { getConfig } from '@/lib/config';
 
-import { GlobalErrorIndicator } from '../components/GlobalErrorIndicator';
-import { GlobalDOMErrorHandler } from '../components/GlobalDOMErrorHandler';
-import { DOMErrorBoundary } from '../components/DOMErrorBoundary';
 import { ChunkErrorGuard } from '../components/ChunkErrorGuard';
+import { CinematicLoadingFallback } from '../components/CinematicLoadingFallback';
+import { DOMErrorBoundary } from '../components/DOMErrorBoundary';
+import { GlobalDOMErrorHandler } from '../components/GlobalDOMErrorHandler';
+import { GlobalErrorIndicator } from '../components/GlobalErrorIndicator';
 import NavigationShell from '../components/NavigationShell';
+import QueryProvider from '../components/QueryProvider';
 import { SiteProvider } from '../components/SiteProvider';
 import { ThemeProvider } from '../components/ThemeProvider';
 import { WatchRoomProvider } from '../components/WatchRoomProvider';
 import { DownloadProvider } from '../contexts/DownloadContext';
 import { GlobalCacheProvider } from '../contexts/GlobalCacheContext';
-import QueryProvider from '../components/QueryProvider';
-import { CinematicLoadingFallback } from '../components/CinematicLoadingFallback';
 
 // 懒加载非关键 UI 组件，减少首屏 JS 体积（代码分割）
 // 未设置 ssr: false，保持服务端渲染兼容性
 const TranslationWarningToast = nextDynamic(() =>
-  import('../components/TranslationWarningToast').then((m) => m.TranslationWarningToast)
+  import('../components/TranslationWarningToast').then(
+    (m) => m.TranslationWarningToast,
+  ),
 );
 const SessionTracker = nextDynamic(() =>
-  import('../components/SessionTracker').then((m) => m.SessionTracker)
+  import('../components/SessionTracker').then((m) => m.SessionTracker),
 );
 const RouteWarmup = nextDynamic(() => import('../components/RouteWarmup'));
 const DownloadPanel = nextDynamic(() =>
-  import('../components/download/DownloadPanel').then((m) => m.DownloadPanel)
+  import('../components/download/DownloadPanel').then((m) => m.DownloadPanel),
 );
-const ChatFloatingWindow = nextDynamic(() => import('../components/watch-room/ChatFloatingWindow'));
+const ChatFloatingWindow = nextDynamic(
+  () => import('../components/watch-room/ChatFloatingWindow'),
+);
 
 const inter = Inter({ subsets: ['latin'] });
 export const dynamic = 'force-dynamic';
@@ -48,7 +52,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
   const config = await getConfig();
-  let siteName = process.env.NEXT_PUBLIC_SITE_NAME || 's00proTV';
+  let siteName = process.env.NEXT_PUBLIC_SITE_NAME || 's00pro-multiplex';
   if (storageType !== 'localstorage') {
     siteName = config.SiteConfig.SiteName;
   }
@@ -74,7 +78,7 @@ export default async function RootLayout({
 
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
 
-  let siteName = process.env.NEXT_PUBLIC_SITE_NAME || 's00proTV';
+  let siteName = process.env.NEXT_PUBLIC_SITE_NAME || 's00pro-multiplex';
   let announcement =
     process.env.ANNOUNCEMENT ||
     '本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。';
@@ -109,7 +113,7 @@ export default async function RootLayout({
     doubanImageProxy = config.SiteConfig.DoubanImageProxy;
     disableYellowFilter = config.SiteConfig.DisableYellowFilter;
     customCategories = config.CustomCategories.filter(
-      (category) => !category.disabled
+      (category) => !category.disabled,
     ).map((category) => ({
       name: category.name || '',
       type: category.type,
@@ -123,7 +127,7 @@ export default async function RootLayout({
     embyEnabled = !!(
       config.EmbyConfig?.Sources &&
       config.EmbyConfig.Sources.length > 0 &&
-      config.EmbyConfig.Sources.some(s => s.enabled && s.ServerURL)
+      config.EmbyConfig.Sources.some((s) => s.enabled && s.ServerURL)
     );
     videoProxyEnabled = config.VideoProxyConfig?.enabled ?? false;
     videoProxyUrl = config.VideoProxyConfig?.proxyUrl || '';
@@ -136,7 +140,8 @@ export default async function RootLayout({
     DOUBAN_PROXY: doubanProxy,
     DOUBAN_IMAGE_PROXY_TYPE: doubanImageProxyType,
     DOUBAN_IMAGE_PROXY: doubanImageProxy,
-    BANGUMI_IMAGE_PROXY_TYPE: process.env.NEXT_PUBLIC_BANGUMI_IMAGE_PROXY_TYPE || 'server',
+    BANGUMI_IMAGE_PROXY_TYPE:
+      process.env.NEXT_PUBLIC_BANGUMI_IMAGE_PROXY_TYPE || 'server',
     BANGUMI_IMAGE_PROXY: process.env.NEXT_PUBLIC_BANGUMI_IMAGE_PROXY || '',
     DISABLE_YELLOW_FILTER: disableYellowFilter,
     CUSTOM_CATEGORIES: customCategories,
@@ -149,7 +154,8 @@ export default async function RootLayout({
     VIDEO_PROXY_ENABLED: videoProxyEnabled,
     VIDEO_PROXY_URL: videoProxyUrl,
     // 禁用预告片：Vercel 自动检测，或用户手动设置 DISABLE_HERO_TRAILER=true
-    DISABLE_HERO_TRAILER: process.env.VERCEL === '1' || process.env.DISABLE_HERO_TRAILER === 'true',
+    DISABLE_HERO_TRAILER:
+      process.env.VERCEL === '1' || process.env.DISABLE_HERO_TRAILER === 'true',
   };
 
   return (
@@ -163,7 +169,10 @@ export default async function RootLayout({
         <meta name='google' content='notranslate' />
         {/* iOS PWA 沉浸式状态栏：manifest.json 里的同名字段对 Safari 无效，必须通过 meta 标签设置 */}
         <meta name='apple-mobile-web-app-capable' content='yes' />
-        <meta name='apple-mobile-web-app-status-bar-style' content='black-translucent' />
+        <meta
+          name='apple-mobile-web-app-status-bar-style'
+          content='black-translucent'
+        />
         <link rel='apple-touch-icon' href='/icons/icon-192x192.png' />
         {/* 将配置序列化后直接写入脚本，浏览器端可通过 window.RUNTIME_CONFIG 获取 */}
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
@@ -209,14 +218,16 @@ export default async function RootLayout({
                     {/* 导航栏在 layout 层，自动持久化 */}
                     <NavigationShell />
                     {/* 主内容区域 - 只有这部分会在路由切换时重新渲染 */}
-                    <main className='w-full min-h-screen pt-[calc(44px+env(safe-area-inset-top))] md:pt-16 pb-16 md:pb-8'>
-                      <div className='w-full max-w-[2560px] mx-auto px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 2xl:px-20'>
-                        <DOMErrorBoundary componentName="PageContent">
-                          <Suspense fallback={
-                            <div className="fixed inset-0 z-50">
-                              <CinematicLoadingFallback />
-                            </div>
-                          }>
+                    <main className='w-full min-h-screen pt-[calc(44px+env(safe-area-inset-top))] md:pt-6 pb-8 md:pl-[var(--sidenav-w,232px)] md:transition-[padding-left] md:duration-300'>
+                      <div className='w-full max-w-[2560px] mx-auto px-4 md:px-6 lg:px-8'>
+                        <DOMErrorBoundary componentName='PageContent'>
+                          <Suspense
+                            fallback={
+                              <div className='fixed inset-0 z-50'>
+                                <CinematicLoadingFallback />
+                              </div>
+                            }
+                          >
                             {children}
                           </Suspense>
                         </DOMErrorBoundary>
@@ -232,7 +243,7 @@ export default async function RootLayout({
               </DownloadProvider>
             </GlobalCacheProvider>
           </QueryProvider>
-          <Toaster position="top-center" richColors closeButton />
+          <Toaster position='top-center' richColors closeButton />
         </ThemeProvider>
       </body>
     </html>

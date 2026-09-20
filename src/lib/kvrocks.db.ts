@@ -6,9 +6,9 @@ export class KvrocksStorage extends BaseRedisStorage {
   constructor() {
     const config = {
       url: process.env.KVROCKS_URL!,
-      clientName: 'Kvrocks'
+      clientName: 'Kvrocks',
     };
-    const globalSymbol = Symbol.for('__S00PROTV_KVROCKS_CLIENT__');
+    const globalSymbol = Symbol.for('__s00pro-multiplex_KVROCKS_CLIENT__');
     super(config, globalSymbol);
   }
 }

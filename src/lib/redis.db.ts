@@ -6,9 +6,9 @@ export class RedisStorage extends BaseRedisStorage {
   constructor() {
     const config = {
       url: process.env.REDIS_URL!,
-      clientName: 'Redis'
+      clientName: 'Redis',
     };
-    const globalSymbol = Symbol.for('__S00PROTV_REDIS_CLIENT__');
+    const globalSymbol = Symbol.for('__s00pro-multiplex_REDIS_CLIENT__');
     super(config, globalSymbol);
   }
 }

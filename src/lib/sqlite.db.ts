@@ -44,7 +44,7 @@ export class SqliteStorage implements IStorage {
 
     const dbPath =
       process.env.SQLITE_DB_PATH ||
-      path.join(process.cwd(), 'data', 's00protv.db');
+      path.join(process.cwd(), 'data', 's00pro-multiplex.db');
     const dbDir = path.dirname(dbPath);
 
     // 自动创建数据库目录

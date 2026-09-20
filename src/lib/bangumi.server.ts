@@ -41,8 +41,9 @@ export async function GetBangumiCalendarData(): Promise<BangumiCalendarData[]> {
 
     const response = await fetch(apiUrl, {
       headers: {
-        'User-Agent': 's00proTV/1.0 (https://github.com/s00pro-joseph/s00proTV)',
-        'Accept': 'application/json',
+        'User-Agent':
+          's00pro-multiplex/1.0 (https://github.com/s00pro-joseph/s00pro-multiplex)',
+        Accept: 'application/json',
       },
       next: {
         revalidate: 300,

@@ -211,14 +211,14 @@ export default function ShortDramaPage() {
           {!isSearchMode && categories.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center space-x-2.5 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-linear-to-br from-purple-500 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                <div className="w-9 h-9 rounded-xl bg-linear-to-br from-green-500 via-green-600 to-emerald-500 flex items-center justify-center shadow-lg shadow-green-500/30">
                   <Filter className="h-4 w-4 text-white" />
                 </div>
                 <span className="text-base font-bold text-gray-900 dark:text-gray-100">
                   分类筛选
                 </span>
                 <div className="flex-1"></div>
-                <span className="text-xs px-2.5 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">
+                <span className="text-xs px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium">
                   {categories.length} 个分类
                 </span>
               </div>
@@ -229,8 +229,8 @@ export default function ShortDramaPage() {
                     onClick={() => setSelectedCategory(category.type_id)}
                     className={`group relative overflow-hidden rounded-xl px-5 py-2.5 text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
                       selectedCategory === category.type_id
-                        ? 'bg-linear-to-r from-purple-500 via-purple-600 to-pink-500 text-white shadow-lg shadow-purple-500/40'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-md'
+                        ? 'bg-linear-to-r from-green-500 via-green-600 to-emerald-500 text-white shadow-lg shadow-green-500/40'
+                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-600 hover:shadow-md'
                     }`}
                     style={{
                       animation: `fadeInUp 0.3s ease-out ${index * 0.03}s both`,
@@ -243,7 +243,7 @@ export default function ShortDramaPage() {
 
                     {/* 未激活状态的悬停背景 */}
                     {selectedCategory !== category.type_id && (
-                      <div className="absolute inset-0 bg-linear-to-r from-purple-50 via-pink-50 to-purple-50 dark:from-purple-900/20 dark:via-pink-900/20 dark:to-purple-900/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                      <div className="absolute inset-0 bg-linear-to-r from-green-50 via-emerald-50 to-green-50 dark:from-green-900/20 dark:via-emerald-900/20 dark:to-green-900/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                     )}
 
                     <span className="relative z-10">{category.type_name}</span>

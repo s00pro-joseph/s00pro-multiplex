@@ -1,4 +1,4 @@
-# s00proTV: pre-commit checks disabled (2026-09-20).
+# s00pro-multiplex: pre-commit checks disabled (2026-09-20).
 # Reason: lint-staged fails on ~2000 pre-existing repo-wide warnings/errors
 # unrelated to any single commit; husky v10 also removed the _/husky.sh shim.
 # Run checks manually: bunx eslint src | bun run build

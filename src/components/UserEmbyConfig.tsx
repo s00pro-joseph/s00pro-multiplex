@@ -25,7 +25,7 @@ const publicSourcesOptions = () => queryOptions({
 
 export const UserEmbyConfig = memo(({ initialConfig }: UserEmbyConfigProps) => {
   const queryClient = useQueryClient();
-  const [sources, setSources] = useState(initialConfig.sources || []);
+  const [sources, setSources] = useState(initialConfig?.sources || []);
   const deferredSources = useDeferredValue(sources);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);

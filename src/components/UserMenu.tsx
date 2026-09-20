@@ -11,16 +11,20 @@ import {
   Heart,
   KeyRound,
   LogOut,
+  Moon,
+  Pencil,
   PlayCircle,
   Settings,
   Shield,
+  Sun,
   Tv,
   User,
   Users,
   X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -43,15 +47,26 @@ import {
   useChangePasswordMutation,
   useInvalidateUserMenuData,
 } from '@/hooks/useUserMenuQueries';
-import { useWatchingUpdatesQuery, useRefreshWatchingUpdates } from '@/hooks/useWatchingUpdates';
+import {
+  useWatchingUpdatesQuery,
+  useRefreshWatchingUpdates,
+} from '@/hooks/useWatchingUpdates';
 
 interface AuthInfo {
   username?: string;
   role?: 'owner' | 'admin' | 'user';
 }
 
-export const UserMenu: React.FC = () => {
+export const UserMenu: React.FC<{
+  variant?: 'account' | 'settings';
+  menuAlign?: 'left' | 'right';
+  menuAnchor?: 'top' | 'bottom';
+}> = ({ variant = 'account', menuAlign, menuAnchor = 'top' }) => {
+  const isSettingsVariant = variant === 'settings';
+  // 菜单对齐：默认账号靠左、设置靠右；侧边栏场景可强制靠左
+  const alignLeft = menuAlign ? menuAlign === 'left' : !isSettingsVariant;
   const router = useRouter();
+  const { setTheme, resolvedTheme } = useTheme();
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -60,6 +75,7 @@ export const UserMenu: React.FC = () => {
   const [isWatchingUpdatesOpen, setIsWatchingUpdatesOpen] = useState(false);
   const [isContinueWatchingOpen, setIsContinueWatchingOpen] = useState(false);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [authInfo, setAuthInfo] = useState<AuthInfo | null>(null);
   const [storageType, setStorageType] = useState<string>(() => {
     // 🔧 优化：直接从 RUNTIME_CONFIG 读取初始值，避免默认值导致的多次渲染
@@ -69,21 +85,26 @@ export const UserMenu: React.FC = () => {
     return 'localstorage';
   });
   const [mounted, setMounted] = useState(false);
-  const [dismissedReleases, setDismissedReleases] = useState<Set<string>>(() => {
-    // 从localStorage加载已忽略的新上映列表
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('s00protv_dismissed_releases');
-        return saved ? new Set(JSON.parse(saved)) : new Set();
-      } catch {
-        return new Set();
+  const [dismissedReleases, setDismissedReleases] = useState<Set<string>>(
+    () => {
+      // 从localStorage加载已忽略的新上映列表
+      if (typeof window !== 'undefined') {
+        try {
+          const saved = localStorage.getItem(
+            's00pro-multiplex_dismissed_releases',
+          );
+          return saved ? new Set(JSON.parse(saved)) : new Set();
+        } catch {
+          return new Set();
+        }
       }
-    }
-    return new Set();
-  });
+      return new Set();
+    },
+  );
 
   // 🚀 TanStack Query - 追番更新
-  const showWatchingUpdates = authInfo?.username && storageType !== 'localstorage';
+  const showWatchingUpdates =
+    authInfo?.username && storageType !== 'localstorage';
   const { data: watchingUpdates } = useWatchingUpdatesQuery({
     enabled: showWatchingUpdates, // 页面加载时就检查（会使用缓存）
   });
@@ -91,17 +112,22 @@ export const UserMenu: React.FC = () => {
 
   // 检查是否有实际更新（用于显示红点）- 包括新剧集更新和新上映
   // 过滤掉已忽略的新上映
-  const hasActualUpdates = watchingUpdates && (
-    (watchingUpdates.updatedCount || 0) > 0 ||
-    watchingUpdates.updatedSeries.filter(
-      series => series.hasNewRelease && !dismissedReleases.has(`${series.sourceKey}+${series.videoId}`)
-    ).length > 0
-  );
+  const hasActualUpdates =
+    watchingUpdates &&
+    ((watchingUpdates.updatedCount || 0) > 0 ||
+      watchingUpdates.updatedSeries.filter(
+        (series) =>
+          series.hasNewRelease &&
+          !dismissedReleases.has(`${series.sourceKey}+${series.videoId}`),
+      ).length > 0);
 
   // 计算更新数量（新剧集更新 + 未忽略的新上映）
-  const totalUpdates = (watchingUpdates?.updatedCount || 0) +
+  const totalUpdates =
+    (watchingUpdates?.updatedCount || 0) +
     (watchingUpdates?.updatedSeries.filter(
-      series => series.hasNewRelease && !dismissedReleases.has(`${series.sourceKey}+${series.videoId}`)
+      (series) =>
+        series.hasNewRelease &&
+        !dismissedReleases.has(`${series.sourceKey}+${series.videoId}`),
     ).length || 0);
 
   // 🚀 TanStack Query - 观影室配置
@@ -116,7 +142,13 @@ export const UserMenu: React.FC = () => {
 
   // Body 滚动锁定 - 使用 overflow 方式避免布局问题
   useEffect(() => {
-    if (isSettingsOpen || isChangePasswordOpen || isWatchingUpdatesOpen || isContinueWatchingOpen || isFavoritesOpen) {
+    if (
+      isSettingsOpen ||
+      isChangePasswordOpen ||
+      isWatchingUpdatesOpen ||
+      isContinueWatchingOpen ||
+      isFavoritesOpen
+    ) {
       const body = document.body;
       const html = document.documentElement;
 
@@ -129,23 +161,34 @@ export const UserMenu: React.FC = () => {
       html.style.overflow = 'hidden';
 
       return () => {
-
         // 恢复所有原始样式
         body.style.overflow = originalBodyOverflow;
         html.style.overflow = originalHtmlOverflow;
       };
     }
-  }, [isSettingsOpen, isChangePasswordOpen, isWatchingUpdatesOpen, isContinueWatchingOpen, isFavoritesOpen]);
+  }, [
+    isSettingsOpen,
+    isChangePasswordOpen,
+    isWatchingUpdatesOpen,
+    isContinueWatchingOpen,
+    isFavoritesOpen,
+  ]);
 
   // 数据查询条件（从 localStorage 读初始值，供 playRecords query 用）
   const [continueWatchingMinProgress] = useState(() =>
-    typeof window !== 'undefined' ? (Number(localStorage.getItem('continueWatchingMinProgress')) || 5) : 5
+    typeof window !== 'undefined'
+      ? Number(localStorage.getItem('continueWatchingMinProgress')) || 5
+      : 5,
   );
   const [continueWatchingMaxProgress] = useState(() =>
-    typeof window !== 'undefined' ? (Number(localStorage.getItem('continueWatchingMaxProgress')) || 100) : 100
+    typeof window !== 'undefined'
+      ? Number(localStorage.getItem('continueWatchingMaxProgress')) || 100
+      : 100,
   );
   const [enableContinueWatchingFilter] = useState(() =>
-    typeof window !== 'undefined' ? localStorage.getItem('enableContinueWatchingFilter') === 'true' : false
+    typeof window !== 'undefined'
+      ? localStorage.getItem('enableContinueWatchingFilter') === 'true'
+      : false,
   );
 
   // 修改密码相关状态
@@ -156,10 +199,14 @@ export const UserMenu: React.FC = () => {
   const [passwordError, setPasswordError] = useState('');
 
   // 🚀 TanStack Query - 版本检查
-  const { data: updateStatus = null, isLoading: isChecking } = useVersionCheckQuery();
+  const { data: updateStatus = null, isLoading: isChecking } =
+    useVersionCheckQuery();
 
   // 数据查询条件
-  const dataQueryEnabled = typeof window !== 'undefined' && !!authInfo?.username && storageType !== 'localstorage';
+  const dataQueryEnabled =
+    typeof window !== 'undefined' &&
+    !!authInfo?.username &&
+    storageType !== 'localstorage';
 
   // 🚀 TanStack Query - 播放记录
   const { data: playRecords = [] } = usePlayRecordsQuery({
@@ -193,7 +240,6 @@ export const UserMenu: React.FC = () => {
   // 🚀 观影室配置和下载配置由 TanStack Query 自动管理
 
   // 🚀 版本检查由 TanStack Query 自动管理
-
 
   const handleMenuClick = async () => {
     const willOpen = !isOpen;
@@ -284,7 +330,10 @@ export const UserMenu: React.FC = () => {
 
     // 保存到localStorage
     try {
-      localStorage.setItem('s00protv_dismissed_releases', JSON.stringify([...newDismissed]));
+      localStorage.setItem(
+        's00pro-multiplexultiplex_dismissed_releases',
+        JSON.stringify([...newDismissed]),
+      );
     } catch (error) {
       console.error('保存已忽略列表失败:', error);
     }
@@ -305,19 +354,22 @@ export const UserMenu: React.FC = () => {
   };
 
   // 检查播放记录是否有新集数更新
-  const getNewEpisodesCount = (record: PlayRecord & { key: string }): number => {
+  const getNewEpisodesCount = (
+    record: PlayRecord & { key: string },
+  ): number => {
     if (!watchingUpdates || !watchingUpdates.updatedSeries) return 0;
 
     const { source, id } = parseKey(record.key);
 
     // 在watchingUpdates中查找匹配的剧集
-    const matchedSeries = watchingUpdates.updatedSeries.find(series =>
-      series.sourceKey === source &&
-      series.videoId === id &&
-      series.hasNewEpisode
+    const matchedSeries = watchingUpdates.updatedSeries.find(
+      (series) =>
+        series.sourceKey === source &&
+        series.videoId === id &&
+        series.hasNewEpisode,
     );
 
-    return matchedSeries ? (matchedSeries.newEpisodes || 0) : 0;
+    return matchedSeries ? matchedSeries.newEpisodes || 0 : 0;
   };
 
   const handleChangePassword = () => {
@@ -369,19 +421,22 @@ export const UserMenu: React.FC = () => {
 
     setPasswordLoading(true);
 
-    changePasswordMutation.mutate({ oldPassword, newPassword }, {
-      onSuccess: async () => {
-        // 修改成功，关闭弹窗并登出
-        setIsChangePasswordOpen(false);
-        await handleLogout();
+    changePasswordMutation.mutate(
+      { oldPassword, newPassword },
+      {
+        onSuccess: async () => {
+          // 修改成功，关闭弹窗并登出
+          setIsChangePasswordOpen(false);
+          await handleLogout();
+        },
+        onError: (error) => {
+          setPasswordError(error.message || '网络错误，请稍后重试');
+        },
+        onSettled: () => {
+          setPasswordLoading(false);
+        },
       },
-      onError: (error) => {
-        setPasswordError(error.message || '网络错误，请稍后重试');
-      },
-      onSettled: () => {
-        setPasswordLoading(false);
-      },
-    });
+    );
   };
 
   const handleSettings = () => {
@@ -391,6 +446,74 @@ export const UserMenu: React.FC = () => {
 
   const handleCloseSettings = () => {
     setIsSettingsOpen(false);
+  };
+
+  // 主题切换（设置菜单内联操作，保持菜单开启）
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
+
+  // 头像：localStorage 持久化（压缩至 128px JPEG）
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('s00pro-multiplexultiplex_avatar');
+        if (saved) setAvatar(saved);
+      } catch {
+        // 忽略读取失败
+      }
+    }
+  }, []);
+
+  const handleAvatarFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const size = 128;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      // 按短边居中裁剪为正方形
+      const side = Math.min(img.width, img.height);
+      ctx.drawImage(
+        img,
+        (img.width - side) / 2,
+        (img.height - side) / 2,
+        side,
+        side,
+        0,
+        0,
+        size,
+        size,
+      );
+      URL.revokeObjectURL(url);
+      try {
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setAvatar(dataUrl);
+        localStorage.setItem('s00pro-multiplexultiplex_avatar', dataUrl);
+      } catch {
+        // 存储失败（如配额不足）则仅内存显示
+      }
+    };
+    img.src = url;
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatar(null);
+    try {
+      localStorage.removeItem('s00pro-multiplexultiplex_avatar');
+    } catch {
+      // 忽略
+    }
   };
 
   // 检查是否显示管理面板按钮
@@ -411,7 +534,7 @@ export const UserMenu: React.FC = () => {
     watchingUpdates,
     showWatchingUpdates,
     hasActualUpdates,
-    totalUpdates
+    totalUpdates,
   });
 
   // 角色中文映射
@@ -437,226 +560,279 @@ export const UserMenu: React.FC = () => {
         onClick={handleCloseMenu}
       />
 
-      {/* 菜单面板 */}
-      <div className='fixed top-14 right-4 w-56 bg-white dark:bg-gray-900 rounded-lg shadow-xl z-1001 border border-gray-200/50 dark:border-gray-700/50 overflow-hidden select-none'>
-        {/* 用户信息区域 */}
-        <div className='px-3 py-2.5 border-b border-gray-200 dark:border-gray-700 bg-linear-to-r from-gray-50 to-gray-100/50 dark:from-gray-800 dark:to-gray-800/50'>
-          <div className='space-y-1'>
-            <div className='flex items-center justify-between'>
-              <span className='text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider'>
-                当前用户
-              </span>
-              <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${(authInfo?.role || 'user') === 'owner'
-                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                  : (authInfo?.role || 'user') === 'admin'
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                    : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+      {/* 菜单面板（默认账号版靠左、设置版靠右，可覆写） */}
+      <div
+        className={`fixed w-56 bg-white dark:bg-gray-900 rounded-lg shadow-xl z-1001 border border-gray-200/50 dark:border-gray-700/50 overflow-hidden select-none ${alignLeft ? 'left-4' : 'right-4'} ${menuAnchor === 'bottom' ? 'bottom-4' : 'top-14'}`}
+      >
+        {/* 用户信息区域（仅账号版） */}
+        {!isSettingsVariant && (
+          <div className='px-3 py-2.5 border-b border-gray-200 dark:border-gray-700 bg-linear-to-r from-gray-50 to-gray-100/50 dark:from-gray-800 dark:to-gray-800/50'>
+            <div className='space-y-1'>
+              <div className='flex items-center justify-between'>
+                <span className='text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider'>
+                  当前用户
+                </span>
+                <span
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                    (authInfo?.role || 'user') === 'owner'
+                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                      : (authInfo?.role || 'user') === 'admin'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                        : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                   }`}
-              >
-                {getRoleText(authInfo?.role || 'user')}
-              </span>
-            </div>
-            <div className='flex items-center justify-between'>
-              <div className='font-semibold text-gray-900 dark:text-gray-100 text-sm truncate'>
-                {authInfo?.username || 'default'}
+                >
+                  {getRoleText(authInfo?.role || 'user')}
+                </span>
               </div>
-              <div className='text-[10px] text-gray-400 dark:text-gray-500'>
-                数据存储：
-                {storageType === 'localstorage' ? '本地' : storageType}
+              <div className='flex items-center justify-between'>
+                <div className='flex min-w-0 items-center gap-1.5'>
+                  <div className='font-semibold text-gray-900 dark:text-gray-100 text-sm truncate'>
+                    {authInfo?.username || 'default'}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsOpen(false);
+                      setIsProfileOpen(true);
+                    }}
+                    className='shrink-0 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 transition-colors'
+                    aria-label='编辑资料'
+                  >
+                    <Pencil className='h-3 w-3' />
+                  </button>
+                </div>
+                <div className='text-[10px] text-gray-400 dark:text-gray-500'>
+                  数据存储：
+                  {storageType === 'localstorage' ? '本地' : storageType}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* 菜单项 */}
+        {/* 菜单项（设置版：全部选项；账号版：仅登出） */}
         <div className='py-1'>
-          {/* 设置按钮 */}
-          <button
-            onClick={handleSettings}
-            className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-          >
-            <Settings className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-            <span className='font-medium'>设置</span>
-          </button>
+          {isSettingsVariant && (
+            <>
+              {/* 设置按钮 */}
+              <button
+                onClick={handleSettings}
+                className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
+              >
+                <Settings className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                <span className='font-medium'>设置</span>
+              </button>
 
-          {/* 更新提醒按钮 */}
-          {showWatchingUpdates && (
-            <button
-              onClick={handleWatchingUpdates}
-              className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm relative'
-            >
-              <Bell className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-              <span className='font-medium'>更新提醒</span>
-              {hasActualUpdates && totalUpdates > 0 && (
-                <div className='ml-auto flex items-center gap-1'>
-                  <span className='inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full'>
-                    {totalUpdates > 99 ? '99+' : totalUpdates}
+              {/* 更新提醒按钮 */}
+              {showWatchingUpdates && (
+                <button
+                  onClick={handleWatchingUpdates}
+                  className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm relative'
+                >
+                  <Bell className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                  <span className='font-medium'>更新提醒</span>
+                  {hasActualUpdates && totalUpdates > 0 && (
+                    <div className='ml-auto flex items-center gap-1'>
+                      <span className='inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full'>
+                        {totalUpdates > 99 ? '99+' : totalUpdates}
+                      </span>
+                    </div>
+                  )}
+                </button>
+              )}
+
+              {/* 继续观看按钮 */}
+              {showWatchingUpdates && (
+                <button
+                  onClick={handleContinueWatching}
+                  className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm relative'
+                >
+                  <PlayCircle className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                  <span className='font-medium'>继续观看</span>
+                  {playRecords.length > 0 && (
+                    <span className='ml-auto text-xs text-gray-400'>
+                      {playRecords.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* 我的收藏按钮 */}
+              {showWatchingUpdates && (
+                <button
+                  onClick={handleFavorites}
+                  className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm relative'
+                >
+                  <Heart className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                  <span className='font-medium'>我的收藏</span>
+                  {favorites.length > 0 && (
+                    <span className='ml-auto text-xs text-gray-400'>
+                      {favorites.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* 管理面板按钮 */}
+              {showAdminPanel && (
+                <button
+                  onClick={handleAdminPanel}
+                  className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
+                >
+                  <Shield className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                  <span className='font-medium'>管理面板</span>
+                </button>
+              )}
+
+              {/* 播放统计按钮 */}
+              {showPlayStats && (
+                <button
+                  onClick={handlePlayStats}
+                  className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
+                >
+                  <BarChart3 className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                  <span className='font-medium'>
+                    {authInfo?.role === 'owner' || authInfo?.role === 'admin'
+                      ? '播放统计'
+                      : '个人统计'}
                   </span>
-                </div>
+                </button>
               )}
-            </button>
-          )}
 
-          {/* 继续观看按钮 */}
-          {showWatchingUpdates && (
-            <button
-              onClick={handleContinueWatching}
-              className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm relative'
-            >
-              <PlayCircle className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-              <span className='font-medium'>继续观看</span>
-              {playRecords.length > 0 && (
-                <span className='ml-auto text-xs text-gray-400'>{playRecords.length}</span>
+              {/* 上映日程按钮 */}
+              <button
+                onClick={handleReleaseCalendar}
+                className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
+              >
+                <Calendar className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                <span className='font-medium'>上映日程</span>
+              </button>
+
+              {/* TVBox配置按钮 */}
+              <button
+                onClick={handleTVBoxConfig}
+                className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
+              >
+                <Tv className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                <span className='font-medium'>TVBox 配置</span>
+              </button>
+
+              {/* 观影室按钮 */}
+              {showWatchRoom && (
+                <button
+                  onClick={handleWatchRoom}
+                  className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
+                >
+                  <Users className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                  <span className='font-medium'>观影室</span>
+                </button>
               )}
-            </button>
-          )}
 
-          {/* 我的收藏按钮 */}
-          {showWatchingUpdates && (
-            <button
-              onClick={handleFavorites}
-              className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm relative'
-            >
-              <Heart className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-              <span className='font-medium'>我的收藏</span>
-              {favorites.length > 0 && (
-                <span className='ml-auto text-xs text-gray-400'>{favorites.length}</span>
+              {/* 下载管理按钮 */}
+              {downloadEnabled && (
+                <button
+                  onClick={() => {
+                    setShowDownloadPanel(true);
+                    handleCloseMenu();
+                  }}
+                  className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
+                >
+                  <Download className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                  <span className='font-medium'>下载管理</span>
+                  {tasks.filter((t) => t.status === 'downloading').length >
+                    0 && (
+                    <span className='ml-auto flex items-center gap-1'>
+                      <span className='relative flex h-2 w-2'>
+                        <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75'></span>
+                        <span className='relative inline-flex rounded-full h-2 w-2 bg-green-500'></span>
+                      </span>
+                      <span className='text-xs text-green-600 dark:text-green-400'>
+                        {tasks.filter((t) => t.status === 'downloading').length}
+                      </span>
+                    </span>
+                  )}
+                  {tasks.length > 0 &&
+                    tasks.filter((t) => t.status === 'downloading').length ===
+                      0 && (
+                      <span className='ml-auto text-xs text-gray-400'>
+                        {tasks.length}
+                      </span>
+                    )}
+                </button>
               )}
-            </button>
-          )}
 
-          {/* 管理面板按钮 */}
-          {showAdminPanel && (
-            <button
-              onClick={handleAdminPanel}
-              className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-            >
-              <Shield className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-              <span className='font-medium'>管理面板</span>
-            </button>
-          )}
-
-          {/* 播放统计按钮 */}
-          {showPlayStats && (
-            <button
-              onClick={handlePlayStats}
-              className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-            >
-              <BarChart3 className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-              <span className='font-medium'>
-                {authInfo?.role === 'owner' || authInfo?.role === 'admin' ? '播放统计' : '个人统计'}
-              </span>
-            </button>
-          )}
-
-          {/* 上映日程按钮 */}
-          <button
-            onClick={handleReleaseCalendar}
-            className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-          >
-            <Calendar className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-            <span className='font-medium'>上映日程</span>
-          </button>
-
-          {/* TVBox配置按钮 */}
-          <button
-            onClick={handleTVBoxConfig}
-            className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-          >
-            <Tv className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-            <span className='font-medium'>TVBox 配置</span>
-          </button>
-
-          {/* 观影室按钮 */}
-          {showWatchRoom && (
-            <button
-              onClick={handleWatchRoom}
-              className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-            >
-              <Users className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-              <span className='font-medium'>观影室</span>
-            </button>
-          )}
-
-          {/* 下载管理按钮 */}
-          {downloadEnabled && (
-            <button
-              onClick={() => {
-                setShowDownloadPanel(true);
-                handleCloseMenu();
-              }}
-              className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-            >
-              <Download className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-              <span className='font-medium'>下载管理</span>
-              {tasks.filter(t => t.status === 'downloading').length > 0 && (
-                <span className='ml-auto flex items-center gap-1'>
-                  <span className='relative flex h-2 w-2'>
-                    <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75'></span>
-                    <span className='relative inline-flex rounded-full h-2 w-2 bg-green-500'></span>
-                  </span>
-                  <span className='text-xs text-green-600 dark:text-green-400'>
-                    {tasks.filter(t => t.status === 'downloading').length}
-                  </span>
-                </span>
+              {/* 修改密码按钮 */}
+              {showChangePassword && (
+                <button
+                  onClick={handleChangePassword}
+                  className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
+                >
+                  <KeyRound className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                  <span className='font-medium'>修改密码</span>
+                </button>
               )}
-              {tasks.length > 0 && tasks.filter(t => t.status === 'downloading').length === 0 && (
-                <span className='ml-auto text-xs text-gray-400'>{tasks.length}</span>
-              )}
-            </button>
-          )}
 
-          {/* 修改密码按钮 */}
-          {showChangePassword && (
-            <button
-              onClick={handleChangePassword}
-              className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-            >
-              <KeyRound className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-              <span className='font-medium'>修改密码</span>
-            </button>
-          )}
-
-          {/* 分割线 */}
-          <div className='my-1 border-t border-gray-200 dark:border-gray-700'></div>
-
-          {/* 登出按钮 */}
-          <button
-            onClick={handleLogout}
-            className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-[background-color] duration-150 ease-in-out text-sm'
-          >
-            <LogOut className='w-4 h-4' />
-            <span className='font-medium'>登出</span>
-          </button>
-
-          {/* 分割线 */}
-          <div className='my-1 border-t border-gray-200 dark:border-gray-700'></div>
-
-          {/* 版本信息 */}
-          <button
-            onClick={() => {
-              setIsVersionPanelOpen(true);
-              handleCloseMenu();
-            }}
-            className='w-full px-3 py-2 text-center flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-xs'
-          >
-            <div className='flex items-center gap-1'>
-              <span className='font-mono'>v{CURRENT_VERSION}</span>
-              {!isChecking &&
-                updateStatus &&
-                updateStatus !== UpdateStatus.FETCH_FAILED && (
-                  <div
-                    className={`w-2 h-2 rounded-full -translate-y-2 ${updateStatus === UpdateStatus.HAS_UPDATE
-                      ? 'bg-yellow-500'
-                      : updateStatus === UpdateStatus.NO_UPDATE
-                        ? 'bg-green-400'
-                        : ''
-                      }`}
-                  ></div>
+              {/* 主题切换（原顶栏按钮并入设置菜单） */}
+              <button
+                onClick={toggleTheme}
+                className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
+              >
+                {resolvedTheme === 'dark' ? (
+                  <Sun className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+                ) : (
+                  <Moon className='w-4 h-4 text-gray-500 dark:text-gray-400' />
                 )}
-            </div>
-          </button>
+                <span className='font-medium'>
+                  {resolvedTheme === 'dark' ? '浅色模式' : '深色模式'}
+                </span>
+              </button>
+            </>
+          )}
+
+          {!isSettingsVariant && (
+            <>
+              {/* 登出按钮 */}
+              <button
+                onClick={handleLogout}
+                className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-[background-color] duration-150 ease-in-out text-sm'
+              >
+                <LogOut className='w-4 h-4' />
+                <span className='font-medium'>登出</span>
+              </button>
+            </>
+          )}
+
+          {isSettingsVariant && (
+            <>
+              {/* 分割线 */}
+              <div className='my-1 border-t border-gray-200 dark:border-gray-700'></div>
+
+              {/* 版本信息 */}
+              <button
+                onClick={() => {
+                  setIsVersionPanelOpen(true);
+                  handleCloseMenu();
+                }}
+                className='w-full px-3 py-2 text-center flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-xs'
+              >
+                <div className='flex items-center gap-1'>
+                  <span className='font-mono'>v{CURRENT_VERSION}</span>
+                  {!isChecking &&
+                    updateStatus &&
+                    updateStatus !== UpdateStatus.FETCH_FAILED && (
+                      <div
+                        className={`w-2 h-2 rounded-full -translate-y-2 ${
+                          updateStatus === UpdateStatus.HAS_UPDATE
+                            ? 'bg-yellow-500'
+                            : updateStatus === UpdateStatus.NO_UPDATE
+                              ? 'bg-green-400'
+                              : ''
+                        }`}
+                      ></div>
+                    )}
+                </div>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </>
@@ -683,9 +859,7 @@ export const UserMenu: React.FC = () => {
       />
 
       {/* 修改密码面板 */}
-      <div
-        className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-gray-900 rounded-xl shadow-xl z-1001 overflow-hidden'
-      >
+      <div className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-gray-900 rounded-xl shadow-xl z-1001 overflow-hidden'>
         {/* 内容容器 - 独立的滚动区域 */}
         <div
           className='h-full p-6'
@@ -779,7 +953,12 @@ export const UserMenu: React.FC = () => {
             <button
               onClick={handleSubmitChangePassword}
               className='flex-1 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-              disabled={passwordLoading || !oldPassword || !newPassword || !confirmPassword}
+              disabled={
+                passwordLoading ||
+                !oldPassword ||
+                !newPassword ||
+                !confirmPassword
+              }
             >
               {passwordLoading ? '修改中...' : '确认修改'}
             </button>
@@ -815,9 +994,7 @@ export const UserMenu: React.FC = () => {
       />
 
       {/* 更新弹窗 */}
-      <div
-        className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-xl shadow-xl z-1001 flex flex-col'
-      >
+      <div className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-xl shadow-xl z-1001 flex flex-col'>
         {/* 内容容器 - 独立的滚动区域 */}
         <div
           className='flex-1 p-6 overflow-y-auto'
@@ -865,107 +1042,145 @@ export const UserMenu: React.FC = () => {
               </div>
             )}
             {/* 新上映的剧集 */}
-            {watchingUpdates && watchingUpdates.updatedSeries.filter(series => series.hasNewRelease && !dismissedReleases.has(`${series.sourceKey}+${series.videoId}`)).length > 0 && (
-              <div className='mb-8'>
-                <div className='flex items-center gap-2 mb-4'>
-                  <h4 className='text-lg font-semibold text-gray-900 dark:text-white'>
-                    🎬 新上映
-                  </h4>
-                  <div className='flex items-center gap-1'>
-                    <div className='w-2 h-2 bg-green-500 rounded-full animate-pulse'></div>
-                    <span className='text-sm text-green-500 font-medium'>
-                      {watchingUpdates.updatedSeries.filter(series => series.hasNewRelease && !dismissedReleases.has(`${series.sourceKey}+${series.videoId}`)).length}部新上映
-                    </span>
+            {watchingUpdates &&
+              watchingUpdates.updatedSeries.filter(
+                (series) =>
+                  series.hasNewRelease &&
+                  !dismissedReleases.has(
+                    `${series.sourceKey}+${series.videoId}`,
+                  ),
+              ).length > 0 && (
+                <div className='mb-8'>
+                  <div className='flex items-center gap-2 mb-4'>
+                    <h4 className='text-lg font-semibold text-gray-900 dark:text-white'>
+                      🎬 新上映
+                    </h4>
+                    <div className='flex items-center gap-1'>
+                      <div className='w-2 h-2 bg-green-500 rounded-full animate-pulse'></div>
+                      <span className='text-sm text-green-500 font-medium'>
+                        {
+                          watchingUpdates.updatedSeries.filter(
+                            (series) =>
+                              series.hasNewRelease &&
+                              !dismissedReleases.has(
+                                `${series.sourceKey}+${series.videoId}`,
+                              ),
+                          ).length
+                        }
+                        部新上映
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'>
-                  {watchingUpdates.updatedSeries
-                    .filter(series => series.hasNewRelease && !dismissedReleases.has(`${series.sourceKey}+${series.videoId}`))
-                    .map((series, index) => (
-                      <div key={`release-${series.title}_${series.year}_${index}`} className='relative group/card'>
-                        <div className='relative group-hover/card:z-5 transition-all duration-300'>
-                          <VideoCard
-                            title={series.title}
-                            poster={series.cover}
-                            year={series.year}
-                            source={series.sourceKey}
-                            source_name={series.source_name}
-                            episodes={series.totalEpisodes}
-                            id={series.videoId}
-                            onDelete={undefined}
-                            type={series.totalEpisodes > 1 ? 'tv' : 'movie'}
-                            from="favorite"
-                            remarks={series.remarks}
-                            releaseDate={series.releaseDate}
-                          />
-                        </div>
-                        {/* 新上映徽章 */}
-                        <div className='absolute -top-2 -right-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded-md shadow-lg animate-pulse z-10 font-bold'>
-                          新上映
-                        </div>
-                        {/* 不再提醒按钮 */}
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleDismissRelease(series.sourceKey, series.videoId);
-                          }}
-                          className='absolute -top-2 -left-2 bg-gray-800/80 hover:bg-gray-900 text-white rounded-full p-1 shadow-lg z-10 opacity-0 group-hover/card:opacity-100 transition-opacity'
-                          title='不再提醒'
+                  <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'>
+                    {watchingUpdates.updatedSeries
+                      .filter(
+                        (series) =>
+                          series.hasNewRelease &&
+                          !dismissedReleases.has(
+                            `${series.sourceKey}+${series.videoId}`,
+                          ),
+                      )
+                      .map((series, index) => (
+                        <div
+                          key={`release-${series.title}_${series.year}_${index}`}
+                          className='relative group/card'
                         >
-                          <X className='w-3 h-3' />
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-            {/* 有新集数的剧集 */}
-            {watchingUpdates && watchingUpdates.updatedSeries.filter(series => series.hasNewEpisode).length > 0 && (
-              <div>
-                <div className='flex items-center gap-2 mb-4'>
-                  <h4 className='text-lg font-semibold text-gray-900 dark:text-white'>
-                    新集更新
-                  </h4>
-                  <div className='flex items-center gap-1'>
-                    <div className='w-2 h-2 bg-red-500 rounded-full animate-pulse'></div>
-                    <span className='text-sm text-red-500 font-medium'>
-                      {watchingUpdates.updatedSeries.filter(series => series.hasNewEpisode).length}部剧集有更新
-                    </span>
+                          <div className='relative group-hover/card:z-5 transition-all duration-300'>
+                            <VideoCard
+                              title={series.title}
+                              poster={series.cover}
+                              year={series.year}
+                              source={series.sourceKey}
+                              source_name={series.source_name}
+                              episodes={series.totalEpisodes}
+                              id={series.videoId}
+                              onDelete={undefined}
+                              type={series.totalEpisodes > 1 ? 'tv' : 'movie'}
+                              from='favorite'
+                              remarks={series.remarks}
+                              releaseDate={series.releaseDate}
+                            />
+                          </div>
+                          {/* 新上映徽章 */}
+                          <div className='absolute -top-2 -right-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded-md shadow-lg animate-pulse z-10 font-bold'>
+                            新上映
+                          </div>
+                          {/* 不再提醒按钮 */}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleDismissRelease(
+                                series.sourceKey,
+                                series.videoId,
+                              );
+                            }}
+                            className='absolute -top-2 -left-2 bg-gray-800/80 hover:bg-gray-900 text-white rounded-full p-1 shadow-lg z-10 opacity-0 group-hover/card:opacity-100 transition-opacity'
+                            title='不再提醒'
+                          >
+                            <X className='w-3 h-3' />
+                          </button>
+                        </div>
+                      ))}
                   </div>
                 </div>
+              )}
+            {/* 有新集数的剧集 */}
+            {watchingUpdates &&
+              watchingUpdates.updatedSeries.filter(
+                (series) => series.hasNewEpisode,
+              ).length > 0 && (
+                <div>
+                  <div className='flex items-center gap-2 mb-4'>
+                    <h4 className='text-lg font-semibold text-gray-900 dark:text-white'>
+                      新集更新
+                    </h4>
+                    <div className='flex items-center gap-1'>
+                      <div className='w-2 h-2 bg-red-500 rounded-full animate-pulse'></div>
+                      <span className='text-sm text-red-500 font-medium'>
+                        {
+                          watchingUpdates.updatedSeries.filter(
+                            (series) => series.hasNewEpisode,
+                          ).length
+                        }
+                        部剧集有更新
+                      </span>
+                    </div>
+                  </div>
 
-                <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'>
-                  {watchingUpdates.updatedSeries
-                    .filter(series => series.hasNewEpisode)
-                    .map((series, index) => (
-                      <div key={`new-${series.title}_${series.year}_${index}`} className='relative group/card'>
-                        <div className='relative group-hover/card:z-5 transition-all duration-300'>
-                          <VideoCard
-                            title={series.title}
-                            poster={series.cover}
-                            year={series.year}
-                            source={series.sourceKey}
-                            source_name={series.source_name}
-                            episodes={series.totalEpisodes}
-                            currentEpisode={series.currentEpisode}
-                            id={series.videoId}
-                            onDelete={undefined}
-                            type={series.totalEpisodes > 1 ? 'tv' : ''}
-                            from="playrecord"
-                          />
+                  <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'>
+                    {watchingUpdates.updatedSeries
+                      .filter((series) => series.hasNewEpisode)
+                      .map((series, index) => (
+                        <div
+                          key={`new-${series.title}_${series.year}_${index}`}
+                          className='relative group/card'
+                        >
+                          <div className='relative group-hover/card:z-5 transition-all duration-300'>
+                            <VideoCard
+                              title={series.title}
+                              poster={series.cover}
+                              year={series.year}
+                              source={series.sourceKey}
+                              source_name={series.source_name}
+                              episodes={series.totalEpisodes}
+                              currentEpisode={series.currentEpisode}
+                              id={series.videoId}
+                              onDelete={undefined}
+                              type={series.totalEpisodes > 1 ? 'tv' : ''}
+                              from='playrecord'
+                            />
+                          </div>
+                          {/* 新集数徽章 - Netflix 统一风格 */}
+                          <div className='absolute -top-2 -right-2 bg-red-600 text-white text-xs px-2 py-0.5 rounded-md shadow-lg animate-pulse z-10 font-bold'>
+                            +{series.newEpisodes}
+                          </div>
                         </div>
-                        {/* 新集数徽章 - Netflix 统一风格 */}
-                        <div className='absolute -top-2 -right-2 bg-red-600 text-white text-xs px-2 py-0.5 rounded-md shadow-lg animate-pulse z-10 font-bold'>
-                          +{series.newEpisodes}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                  </div>
                 </div>
-              </div>
-            )}
-
+              )}
           </div>
 
           {/* 底部说明 */}
@@ -1053,7 +1268,9 @@ export const UserMenu: React.FC = () => {
                         <div className='flex-1 bg-gray-600 rounded-full h-1'>
                           <div
                             className='bg-blue-500 h-1 rounded-full transition-all'
-                            style={{ width: `${Math.min(getProgress(record), 100)}%` }}
+                            style={{
+                              width: `${Math.min(getProgress(record), 100)}%`,
+                            }}
                           />
                         </div>
                         <span className='text-xs text-white font-medium'>
@@ -1071,12 +1288,13 @@ export const UserMenu: React.FC = () => {
           {playRecords.length === 0 && (
             <div className='text-center py-12'>
               <PlayCircle className='w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4' />
-              <p className='text-gray-500 dark:text-gray-400 mb-2'>暂无需要继续观看的内容</p>
+              <p className='text-gray-500 dark:text-gray-400 mb-2'>
+                暂无需要继续观看的内容
+              </p>
               <p className='text-xs text-gray-400 dark:text-gray-500'>
                 {enableContinueWatchingFilter
                   ? `观看进度在${continueWatchingMinProgress}%-${continueWatchingMaxProgress}%之间且播放时间超过2分钟的内容会显示在这里`
-                  : '播放时间超过2分钟的所有内容都会显示在这里'
-                }
+                  : '播放时间超过2分钟的所有内容都会显示在这里'}
               </p>
             </div>
           )}
@@ -1142,7 +1360,10 @@ export const UserMenu: React.FC = () => {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 const releaseDate = new Date(favorite.releaseDate);
-                const daysDiff = Math.ceil((releaseDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                const daysDiff = Math.ceil(
+                  (releaseDate.getTime() - today.getTime()) /
+                    (1000 * 60 * 60 * 24),
+                );
 
                 // 根据天数差异动态更新显示文字
                 if (daysDiff < 0) {
@@ -1215,18 +1436,30 @@ export const UserMenu: React.FC = () => {
       <div className='relative'>
         <button
           onClick={handleMenuClick}
-          className='relative w-10 h-10 p-2 rounded-full flex items-center justify-center text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 dark:hover:shadow-blue-400/30 group'
-          aria-label='User Menu'
+          className='relative w-11 h-11 p-2 rounded-full flex items-center justify-center text-gray-600 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400 transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 dark:hover:shadow-blue-400/30 group'
+          aria-label={isSettingsVariant ? 'Settings Menu' : 'User Menu'}
         >
           {/* 微光背景效果 */}
           <div className='absolute inset-0 rounded-full bg-linear-to-br from-blue-400/0 to-purple-600/0 group-hover:from-blue-400/20 group-hover:to-purple-600/20 dark:group-hover:from-blue-300/20 dark:group-hover:to-purple-500/20 transition-all duration-300'></div>
 
-          <User className='w-full h-full relative z-10 group-hover:scale-110 transition-transform duration-300' />
+          {isSettingsVariant ? (
+            <Settings className='w-full h-full relative z-10 group-hover:rotate-90 transition-transform duration-300' />
+          ) : avatar ? (
+            <img
+              src={avatar}
+              alt='头像'
+              className='absolute inset-0 z-10 h-full w-full rounded-full object-cover'
+            />
+          ) : (
+            <User className='w-full h-full relative z-10 group-hover:scale-110 transition-transform duration-300' />
+          )}
         </button>
-        {/* 统一更新提醒点：版本更新或剧集更新都显示橙色点 */}
-        {((updateStatus === UpdateStatus.HAS_UPDATE) || (hasActualUpdates && totalUpdates > 0)) && (
-          <div className='absolute top-[2px] right-[2px] w-2 h-2 bg-yellow-500 rounded-full animate-pulse shadow-lg shadow-yellow-500/50'></div>
-        )}
+        {/* 统一更新提醒点：版本更新或剧集更新都显示橙色点（仅设置按钮） */}
+        {isSettingsVariant &&
+          (updateStatus === UpdateStatus.HAS_UPDATE ||
+            (hasActualUpdates && totalUpdates > 0)) && (
+            <div className='absolute top-[2px] right-[2px] w-2 h-2 bg-yellow-500 rounded-full animate-pulse shadow-lg shadow-yellow-500/50'></div>
+          )}
       </div>
 
       {/* 使用 Portal 将菜单面板渲染到 document.body */}
@@ -1256,6 +1489,88 @@ export const UserMenu: React.FC = () => {
       {isFavoritesOpen &&
         mounted &&
         createPortal(favoritesPanel, document.body)}
+
+      {/* 个人资料弹窗（头像管理） */}
+      {isProfileOpen &&
+        mounted &&
+        createPortal(
+          <>
+            <div
+              className='fixed inset-0 bg-black/50 backdrop-blur-sm z-1000'
+              onClick={() => setIsProfileOpen(false)}
+            />
+            <div className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xs bg-white dark:bg-gray-900 rounded-xl shadow-xl z-1001 overflow-hidden p-5'>
+              <h3 className='mb-4 text-base font-bold text-gray-900 dark:text-gray-100'>
+                个人资料
+              </h3>
+
+              <div className='mb-4 flex flex-col items-center gap-3'>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className='relative h-20 w-20 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 ring-2 ring-gray-200 dark:ring-gray-700 transition hover:ring-blue-400'
+                  aria-label='更换头像'
+                >
+                  {avatar ? (
+                    <img
+                      src={avatar}
+                      alt='头像'
+                      className='h-full w-full object-cover'
+                    />
+                  ) : (
+                    <User className='h-full w-full p-4 text-gray-400' />
+                  )}
+                  <span className='absolute inset-x-0 bottom-0 bg-black/50 py-0.5 text-center text-[10px] text-white'>
+                    更换
+                  </span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type='file'
+                  accept='image/*'
+                  className='hidden'
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleAvatarFile(file);
+                    e.target.value = '';
+                  }}
+                />
+                {avatar && (
+                  <button
+                    onClick={handleRemoveAvatar}
+                    className='text-xs text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 transition-colors'
+                  >
+                    移除头像
+                  </button>
+                )}
+              </div>
+
+              <div className='mb-5 space-y-2 text-sm'>
+                <div className='flex items-center justify-between'>
+                  <span className='text-gray-500 dark:text-gray-400'>
+                    用户名
+                  </span>
+                  <span className='font-medium text-gray-900 dark:text-gray-100'>
+                    {authInfo?.username || 'default'}
+                  </span>
+                </div>
+                <div className='flex items-center justify-between'>
+                  <span className='text-gray-500 dark:text-gray-400'>角色</span>
+                  <span className='font-medium text-gray-900 dark:text-gray-100'>
+                    {getRoleText(authInfo?.role || 'user')}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsProfileOpen(false)}
+                className='w-full rounded-lg bg-linear-to-r from-blue-500 to-purple-500 px-4 py-2 text-sm font-medium text-white shadow-md transition-all duration-200 hover:shadow-lg'
+              >
+                完成
+              </button>
+            </div>
+          </>,
+          document.body,
+        )}
 
       {/* 版本面板 */}
       <VersionPanel

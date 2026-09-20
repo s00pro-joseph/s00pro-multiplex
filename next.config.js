@@ -15,6 +15,9 @@ module.exports = (phase) => {
 
     reactStrictMode: false,
 
+    // 关掉 Next.js 开发浮层按钮（图标不可自定义，localhost 用不到）
+    devIndicators: false,
+
     // Puppeteer/Chromium 相关包不进行 bundle（用于 Vercel serverless）
     // 已移除 Puppeteer 依赖以减少包体积（78MB），如需恢复请取消注释并安装依赖
     // serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
