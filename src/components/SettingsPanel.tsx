@@ -11,9 +11,6 @@ import {
 import { memo, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-import { UserEmbyConfig } from './UserEmbyConfig';
-import { useEmbyConfigQuery } from '@/hooks/useUserMenuQueries';
-
 interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -119,9 +116,6 @@ export const SettingsPanel = memo(({ isOpen, onClose }: SettingsPanelProps) => {
   const [bangumiApiProxy, setBangumiApiProxy] = useState('');
   const [bangumiImageProxyType, setBangumiImageProxyType] = useState('cmliussss');
   const [bangumiImageProxyUrl, setBangumiImageProxyUrl] = useState('');
-
-  // ── Emby config via TanStack Query ────────────────────────────────────────
-  const { data: embyConfig = { sources: [] } } = useEmbyConfigQuery(isOpen);
 
   // ── Load settings from localStorage on mount ──────────────────────────────
   useEffect(() => {
@@ -286,15 +280,6 @@ export const SettingsPanel = memo(({ isOpen, onClose }: SettingsPanelProps) => {
 
           {/* 设置项 */}
           <div className='space-y-6'>
-            {/* Emby 配置 */}
-            <div className='space-y-3'>
-              <div>
-                <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>Emby私人影库</h4>
-                <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>配置你的私人 Emby 服务器</p>
-              </div>
-              <UserEmbyConfig initialConfig={embyConfig} />
-            </div>
-
             <div className='border-t border-gray-200 dark:border-gray-700'></div>
 
             {/* 豆瓣数据源 */}

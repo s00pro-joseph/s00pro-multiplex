@@ -288,6 +288,8 @@ export interface DoubanResult {
   code: number;
   message: string;
   list: DoubanItem[];
+  // 聚合翻页时服务端实际消费到的 douban 原始偏移，供下一页继续（缺省则用页序号推算）
+  nextStart?: number;
 }
 
 // 豆瓣短评数据结构

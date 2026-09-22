@@ -15,6 +15,7 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { SearchResult } from '@/lib/types';
+import { buildMatchKey, extractZone } from '@/lib/match-key';
 
 // ─── streamedQuery 类型 ───────────────────────────────────────────────────────
 
@@ -147,7 +148,6 @@ import YouTubeVideoCard from '@/components/YouTubeVideoCard';
 import BilibiliVideoCard from '@/components/BilibiliVideoCard';
 import BilibiliUpuserCard from '@/components/BilibiliUpuserCard';
 import DirectYouTubePlayer from '@/components/DirectYouTubePlayer';
-import TMDBFilterPanel, { TMDBFilterState } from '@/components/TMDBFilterPanel';
 import AcgSearch from '@/components/AcgSearch';
 import stcasc from 'switch-chinese';
 
@@ -393,7 +393,7 @@ function SearchPageClient() {
   const [exactSearch, setExactSearch] = useState(true);
 
   // 网盘搜索相关状态
-  const [searchType, setSearchType] = useState<'video' | 'netdisk' | 'youtube' | 'bilibili' | 'tmdb-actor'>('video');
+  const [searchType, setSearchType] = useState<'video' | 'adult' | 'netdisk' | 'youtube' | 'bilibili'>('video');
   const [netdiskResourceType, setNetdiskResourceType] = useState<'netdisk' | 'acg'>('netdisk'); // 网盘资源类型：普通网盘或动漫磁力
   const [netdiskResults, setNetdiskResults] = useState<{ [key: string]: any[] } | null>(null);
   const [netdiskLoading, setNetdiskLoading] = useState(false);
@@ -458,32 +458,6 @@ function SearchPageClient() {
     bilibiliPopularOptions(searchType === 'bilibili' && bilibiliMode === 'popular')
   );
 
-  // TMDB演员搜索相关状态
-  const [tmdbActorResults, setTmdbActorResults] = useState<any[] | null>(null);
-  const [tmdbActorLoading, setTmdbActorLoading] = useState(false);
-  const [tmdbActorError, setTmdbActorError] = useState<string | null>(null);
-  const [tmdbActorType, setTmdbActorType] = useState<'movie' | 'tv'>('movie');
-
-  // TMDB筛选状态
-  const [tmdbFilterState, setTmdbFilterState] = useState<TMDBFilterState>({
-    startYear: undefined,
-    endYear: undefined,
-    minRating: undefined,
-    maxRating: undefined,
-    minPopularity: undefined,
-    maxPopularity: undefined,
-    minVoteCount: undefined,
-    minEpisodeCount: undefined,
-    genreIds: [],
-    languages: [],
-    onlyRated: false,
-    sortBy: 'popularity',
-    sortOrder: 'desc',
-    limit: undefined // 移除默认限制，显示所有结果
-  });
-
-  // TMDB筛选面板显示状态
-  const [tmdbFilterVisible, setTmdbFilterVisible] = useState(false);
   // 聚合卡片 refs 与聚合统计缓存
   const groupRefs = useRef<Map<string, React.RefObject<VideoCardHandle>>>(new Map());
   const groupStatsRef = useRef<Map<string, { douban_id?: number; episodes?: number; source_names: string[] }>>(new Map());
@@ -621,12 +595,14 @@ function SearchPageClient() {
   // ─── TanStack Query 驱动搜索 ────────────────────────────────────────────────
   const trimmedQuery = useMemo(() => (searchParams.get('q') || '').trim(), [searchParams]);
 
+  // 成人频道：只查 is_adult 源（后端 getAvailableApiSites adultChannel 隔离）
+  const isAdultSearch = searchType === 'adult';
   // 流式搜索
   const streamedSearchQuery = useQuery<StreamedState>({
-    queryKey: ['search', 'streamed', trimmedQuery],
+    queryKey: ['search', 'streamed', trimmedQuery, isAdultSearch ? 'adult' : 'video'],
     queryFn: streamedQuery<SSEChunk, StreamedState>({
       streamFn: (ctx) => eventSourceIterable(
-        `/api/search/ws?q=${encodeURIComponent(trimmedQuery)}`,
+        `/api/search/ws?q=${encodeURIComponent(trimmedQuery)}${isAdultSearch ? '&adult=1' : ''}`,
         ctx.signal,
       ),
       refetchMode: 'reset',
@@ -646,20 +622,25 @@ function SearchPageClient() {
       },
       initialValue: STREAMED_INITIAL,
     }),
-    enabled: !!trimmedQuery && useFluidSearch,
+    enabled: !!trimmedQuery && useFluidSearch && (searchType === 'video' || searchType === 'adult'),
     staleTime: 2 * 60 * 1000,  // 2 minutes - cache search results for quick back navigation
     gcTime: 5 * 60 * 1000,      // 5 minutes - keep in cache longer for search history
   });
 
-  // 传统搜索
-  const traditionalSearchQuery = useQuery<SearchResult[]>({
-    queryKey: ['search', 'traditional', trimmedQuery],
+  // 传统搜索（默认 250 上限，More 按钮取全部）
+  const [showAllResults, setShowAllResults] = useState(false);
+  const traditionalSearchQuery = useQuery<{ results: SearchResult[]; limited: boolean; total: number }>({
+    queryKey: ['search', 'traditional', trimmedQuery, showAllResults, isAdultSearch ? 'adult' : 'video'],
     queryFn: async () => {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}${showAllResults ? '&all=1' : ''}${isAdultSearch ? '&adult=1' : ''}`);
       const data = await res.json();
-      return Array.isArray(data.results) ? (data.results as SearchResult[]) : [];
+      return {
+        results: Array.isArray(data.results) ? (data.results as SearchResult[]) : [],
+        limited: data.limited === true,
+        total: typeof data.total === 'number' ? data.total : (Array.isArray(data.results) ? data.results.length : 0),
+      };
     },
-    enabled: !!trimmedQuery && !useFluidSearch,
+    enabled: !!trimmedQuery && !useFluidSearch && (searchType === 'video' || searchType === 'adult'),
     staleTime: 2 * 60 * 1000,  // 2 minutes - cache search results for quick back navigation
     gcTime: 5 * 60 * 1000,      // 5 minutes - keep in cache longer for search history
   });
@@ -667,7 +648,14 @@ function SearchPageClient() {
   // 派生统一搜索状态
   const searchResults: SearchResult[] = useFluidSearch
     ? (streamedSearchQuery.data?.results ?? [])
-    : (traditionalSearchQuery.data ?? []);
+    : (traditionalSearchQuery.data?.results ?? []);
+  const searchLimited = !useFluidSearch && (traditionalSearchQuery.data?.limited ?? false);
+  const searchTotal = !useFluidSearch ? (traditionalSearchQuery.data?.total ?? searchResults.length) : searchResults.length;
+
+  // 换关键词时回到 250 上限
+  useEffect(() => {
+    setShowAllResults(false);
+  }, [trimmedQuery]);
   const totalSources = useFluidSearch ? (streamedSearchQuery.data?.totalSources ?? 0) : 1;
   const completedSources = useFluidSearch
     ? (streamedSearchQuery.data?.completedSources ?? 0)
@@ -687,9 +675,13 @@ function SearchPageClient() {
     const keyOrder: string[] = []; // 记录键出现的顺序
 
     filteredResults.forEach((item) => {
-      // 使用 title + year + type 作为键，year 必然存在，但依然兜底 'unknown'
-      const key = `${item.title.replaceAll(' ', '')}-${item.year || 'unknown'
-        }-${item.episodes.length === 1 ? 'movie' : 'tv'}`;
+      // 聚合键：标题+年份+类型+地区（地区未知时退化为旧键）
+      const key = buildMatchKey(
+        item.title,
+        item.year,
+        item.episodes.length,
+        extractZone(item.class, item.remarks, item.type_name),
+      );
       const arr = map.get(key) || [];
 
       // 如果是新的键，记录其顺序
@@ -1014,9 +1006,9 @@ function SearchPageClient() {
     };
   }, []);
 
-  // 监听搜索类型变化，如果切换到网盘/YouTube/Bilibili/TMDB演员搜索且有搜索词，立即搜索
+  // 监听搜索类型变化，如果切换到网盘/YouTube/Bilibili搜索且有搜索词，立即搜索
   useEffect(() => {
-    if ((searchType === 'netdisk' || searchType === 'youtube' || searchType === 'bilibili' || searchType === 'tmdb-actor') && showResults) {
+    if ((searchType === 'netdisk' || searchType === 'youtube' || searchType === 'bilibili') && showResults) {
       const currentQuery = searchQuery.trim() || searchParams.get('q');
       if (currentQuery) {
         if (searchType === 'netdisk' && netdiskResourceType === 'netdisk') {
@@ -1028,8 +1020,6 @@ function SearchPageClient() {
           handleYouTubeSearch(currentQuery);
         } else if (searchType === 'bilibili') {
           handleBilibiliSearch(currentQuery);
-        } else if (searchType === 'tmdb-actor') {
-          handleTmdbActorSearch(currentQuery, tmdbActorType, tmdbFilterState);
         }
       }
     }
@@ -1230,60 +1220,6 @@ function SearchPageClient() {
     }
   };
 
-  // TMDB演员搜索函数
-  const handleTmdbActorSearch = async (query: string, type = tmdbActorType, filterState = tmdbFilterState) => {
-    if (!query.trim()) return;
-
-    console.log(`🚀 [前端TMDB] 开始搜索: ${query}, type=${type}`);
-
-    setTmdbActorLoading(true);
-    setTmdbActorError(null);
-    setTmdbActorResults(null);
-
-    try {
-      // 构建筛选参数
-      const params = new URLSearchParams({
-        actor: query.trim(),
-        type: type
-      });
-
-      // 只有设置了limit且大于0时才添加limit参数
-      if (filterState.limit && filterState.limit > 0) {
-        params.append('limit', filterState.limit.toString());
-      }
-
-      // 添加筛选参数
-      if (filterState.startYear) params.append('startYear', filterState.startYear.toString());
-      if (filterState.endYear) params.append('endYear', filterState.endYear.toString());
-      if (filterState.minRating) params.append('minRating', filterState.minRating.toString());
-      if (filterState.maxRating) params.append('maxRating', filterState.maxRating.toString());
-      if (filterState.minPopularity) params.append('minPopularity', filterState.minPopularity.toString());
-      if (filterState.maxPopularity) params.append('maxPopularity', filterState.maxPopularity.toString());
-      if (filterState.minVoteCount) params.append('minVoteCount', filterState.minVoteCount.toString());
-      if (filterState.minEpisodeCount) params.append('minEpisodeCount', filterState.minEpisodeCount.toString());
-      if (filterState.genreIds && filterState.genreIds.length > 0) params.append('genreIds', filterState.genreIds.join(','));
-      if (filterState.languages && filterState.languages.length > 0) params.append('languages', filterState.languages.join(','));
-      if (filterState.onlyRated) params.append('onlyRated', 'true');
-      if (filterState.sortBy) params.append('sortBy', filterState.sortBy);
-      if (filterState.sortOrder) params.append('sortOrder', filterState.sortOrder);
-
-      // 调用TMDB API端点
-      const response = await fetch(`/api/tmdb/actor?${params.toString()}`);
-      const data = await response.json();
-
-      if (response.ok && data.code === 200) {
-        setTmdbActorResults(data.list || []);
-      } else {
-        setTmdbActorError(data.error || data.message || '搜索演员失败');
-      }
-    } catch (error: any) {
-      console.error('TMDB演员搜索请求失败:', error);
-      setTmdbActorError('搜索演员失败，请稍后重试');
-    } finally {
-      setTmdbActorLoading(false);
-    }
-  };
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = searchQuery.trim().replace(/\s+/g, ' ');
@@ -1315,10 +1251,6 @@ function SearchPageClient() {
         router.push(`/search?q=${encodeURIComponent(trimmed)}`);
         handleBilibiliSearch(trimmed);
       }
-    } else if (searchType === 'tmdb-actor') {
-      // TMDB演员搜索
-      router.push(`/search?q=${encodeURIComponent(trimmed)}`);
-      handleTmdbActorSearch(trimmed, tmdbActorType, tmdbFilterState);
     } else {
       // 原有的影视搜索逻辑
       router.push(`/search?q=${encodeURIComponent(trimmed)}`);
@@ -1365,14 +1297,12 @@ function SearchPageClient() {
                   type='button'
                   onClick={() => {
                     setSearchType('video');
-                    // 切换到影视搜索时，清除网盘、YouTube和TMDB演员搜索状态
+                    // 切换到影视搜索时，清除网盘、YouTube搜索状态
                     setNetdiskResults(null);
                     setNetdiskError(null);
                     setNetdiskTotal(0);
                     setYoutubeResults(null);
                     setYoutubeError(null);
-                    setTmdbActorResults(null);
-                    setTmdbActorError(null);
                     // 如果有搜索词且当前显示结果，触发影视搜索
                     const currentQuery = searchQuery.trim() || searchParams?.get('q');
                     if (currentQuery && showResults) {
@@ -1396,8 +1326,6 @@ function SearchPageClient() {
                     setNetdiskResults(null);
                     setYoutubeResults(null);
                     setYoutubeError(null);
-                    setTmdbActorResults(null);
-                    setTmdbActorError(null);
                     // 如果当前有搜索词，立即触发网盘搜索
                     const currentQuery = searchQuery.trim() || searchParams?.get('q');
                     if (currentQuery && showResults) {
@@ -1425,8 +1353,6 @@ function SearchPageClient() {
                     setNetdiskResults(null);
                     setNetdiskError(null);
                     setNetdiskTotal(0);
-                    setTmdbActorResults(null);
-                    setTmdbActorError(null);
                     // 如果是热门推荐模式，加载地区列表
                     if (youtubeMode === 'popular') {
                       if (youtubeRegions.length === 0) {
@@ -1461,8 +1387,6 @@ function SearchPageClient() {
                     setNetdiskTotal(0);
                     setYoutubeResults(null);
                     setYoutubeError(null);
-                    setTmdbActorResults(null);
-                    setTmdbActorError(null);
                     // 如果是搜索模式且当前有搜索词，立即触发Bilibili搜索
                     if (bilibiliMode === 'search') {
                       const currentQuery = searchQuery.trim() || searchParams?.get('q');
@@ -1482,28 +1406,27 @@ function SearchPageClient() {
                 <button
                   type='button'
                   onClick={() => {
-                    setSearchType('tmdb-actor');
-                    // 清除之前的搜索状态
-                    setTmdbActorError(null);
-                    setTmdbActorResults(null);
+                    setSearchType('adult');
+                    // 清除其他频道状态，成人走自有 CMS 源
+                    setBilibiliError(null);
+                    setBilibiliResults(null);
                     setNetdiskResults(null);
                     setNetdiskError(null);
                     setNetdiskTotal(0);
                     setYoutubeResults(null);
                     setYoutubeError(null);
-                    // 如果当前有搜索词，立即触发TMDB演员搜索
                     const currentQuery = searchQuery.trim() || searchParams?.get('q');
                     if (currentQuery && showResults) {
-                      handleTmdbActorSearch(currentQuery, tmdbActorType, tmdbFilterState);
+                      router.push(`/search?q=${encodeURIComponent(currentQuery)}`);
                     }
                   }}
                   className={`flex-shrink-0 px-4 sm:px-6 py-3 text-sm sm:text-base font-bold rounded-xl transition-all duration-300 whitespace-nowrap min-w-[110px] sm:min-w-0 ${
-                    searchType === 'tmdb-actor'
-                      ? 'bg-gradient-to-br from-purple-400 via-purple-500 to-violet-600 text-white shadow-lg shadow-purple-500/50 scale-105 ring-2 ring-purple-400/60 dark:ring-purple-500/80'
+                    searchType === 'adult'
+                      ? 'bg-gradient-to-br from-gray-800 via-gray-900 to-black text-white shadow-lg shadow-gray-700/50 scale-105 ring-2 ring-red-500/60 dark:ring-red-500/80'
                       : 'bg-gray-200/60 dark:bg-gray-700/80 text-gray-800 dark:text-gray-100 border-2 border-gray-300/50 dark:border-gray-600/50 shadow-md hover:bg-gray-300/80 dark:hover:bg-gray-600/90 hover:scale-105 hover:shadow-lg active:scale-100'
                   }`}
                 >
-                  🎬 TMDB演员
+                  🔞 18禁
                 </button>
               </div>
             </div>
@@ -1521,7 +1444,7 @@ function SearchPageClient() {
                 value={searchQuery}
                 onChange={handleInputChange}
                 onFocus={handleInputFocus}
-                placeholder={searchType === 'video' ? '🎬 搜索电影、电视剧...' : searchType === 'netdisk' ? '💾 搜索网盘资源...' : searchType === 'youtube' ? '📺 搜索YouTube视频...' : searchType === 'bilibili' ? '📺 搜索Bilibili视频...' : '🎭 搜索演员姓名...'}
+                placeholder={searchType === 'video' ? '🎬 搜索电影、电视剧...' : searchType === 'adult' ? '🔞 搜索成人内容...' : searchType === 'netdisk' ? '💾 搜索网盘资源...' : searchType === 'youtube' ? '📺 搜索YouTube视频...' : '📺 搜索Bilibili视频...'}
                 autoComplete="off"
                 className='w-full h-14 rounded-xl bg-white/90 py-4 pl-12 pr-14 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-400 focus:bg-white border-2 border-gray-200/80 shadow-lg hover:shadow-xl focus:shadow-2xl focus:border-green-400 transition-all duration-300 dark:bg-gray-800/90 dark:text-gray-300 dark:placeholder-gray-500 dark:focus:bg-gray-800 dark:border-gray-700 dark:focus:border-green-500 backdrop-blur-sm'
               />
@@ -1643,104 +1566,6 @@ function SearchPageClient() {
                       onError={(error) => setAcgError(error)}
                     />
                   )}
-                </>
-              ) : searchType === 'tmdb-actor' ? (
-                /* TMDB演员搜索结果 */
-                <>
-                  <div className='mb-4'>
-                    <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-                      TMDB演员搜索结果
-                      {tmdbActorLoading && (
-                        <span className='ml-2 inline-block align-middle'>
-                          <span className='inline-block h-3 w-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin'></span>
-                        </span>
-                      )}
-                    </h2>
-
-                    {/* 电影/电视剧类型选择器 */}
-                    <div className='mt-3 flex items-center gap-2'>
-                      <span className='text-sm text-gray-600 dark:text-gray-400'>类型：</span>
-                      <div className='flex gap-2'>
-                        {[
-                          { key: 'movie', label: '电影' },
-                          { key: 'tv', label: '电视剧' }
-                        ].map((type) => (
-                          <button
-                            key={type.key}
-                            onClick={() => {
-                              setTmdbActorType(type.key as 'movie' | 'tv');
-                              const currentQuery = searchQuery.trim() || searchParams?.get('q');
-                              if (currentQuery) {
-                                handleTmdbActorSearch(currentQuery, type.key as 'movie' | 'tv', tmdbFilterState);
-                              }
-                            }}
-                            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-                              tmdbActorType === type.key
-                                ? 'bg-blue-500 text-white border-blue-500'
-                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700'
-                            }`}
-                            disabled={tmdbActorLoading}
-                          >
-                            {type.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* TMDB筛选面板 */}
-                    <div className='mt-4'>
-                      <TMDBFilterPanel
-                        contentType={tmdbActorType}
-                        filters={tmdbFilterState}
-                        onFiltersChange={(newFilterState) => {
-                          setTmdbFilterState(newFilterState);
-                          const currentQuery = searchQuery.trim() || searchParams?.get('q');
-                          if (currentQuery) {
-                            handleTmdbActorSearch(currentQuery, tmdbActorType, newFilterState);
-                          }
-                        }}
-                        isVisible={tmdbFilterVisible}
-                        onToggleVisible={() => setTmdbFilterVisible(!tmdbFilterVisible)}
-                        resultCount={tmdbActorResults?.length || 0}
-                      />
-                    </div>
-                  </div>
-
-                  {tmdbActorError ? (
-                    <div className='text-center py-8'>
-                      <div className='text-red-500 mb-2'>{tmdbActorError}</div>
-                      <button
-                        onClick={() => {
-                          const currentQuery = searchQuery.trim() || searchParams?.get('q');
-                          if (currentQuery) {
-                            handleTmdbActorSearch(currentQuery, tmdbActorType, tmdbFilterState);
-                          }
-                        }}
-                        className='px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors'
-                      >
-                        重试
-                      </button>
-                    </div>
-                  ) : tmdbActorResults && tmdbActorResults.length > 0 ? (
-                    <div className='grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'>
-                      {tmdbActorResults.map((item, index) => (
-                        <div key={item.id || index} className='w-full'>
-                          <VideoCard
-                            title={item.title}
-                            poster={item.poster}
-                            year={item.year}
-                            rate={item.rate}
-                            from='douban'
-                            type={tmdbActorType}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  ) : !tmdbActorLoading ? (
-                    <div className='text-center text-gray-500 py-8 dark:text-gray-400'>
-                      未找到相关演员作品
-                    </div>
-                  ) : null}
                 </>
               ) : searchType === 'youtube' ? (
                 /* YouTube搜索结果 */
@@ -2185,7 +2010,7 @@ function SearchPageClient() {
                   {/* 标题 */}
                   <div className='mb-4'>
                     <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-                      搜索结果
+                      {searchType === 'adult' ? '🔞 成人搜索结果' : '搜索结果'}
                       {totalSources > 0 && useFluidSearch && (
                         <span className='ml-2 text-sm font-normal text-gray-500 dark:text-gray-400'>
                           {completedSources}/{totalSources}
@@ -2481,7 +2306,17 @@ function SearchPageClient() {
                         <p className='text-base font-semibold text-gray-800 dark:text-gray-200 mb-1'>搜索完成</p>
                         <p className='text-xs text-gray-600 dark:text-gray-400'>
                           共找到 {viewMode === 'agg' ? filteredAggResults.length : filteredAllResults.length} 个结果
+                          {searchLimited && !showAllResults && `（仅显示前 250 / 共 ${searchTotal}）`}
                         </p>
+                        {searchLimited && !showAllResults && (
+                          <button
+                            onClick={() => setShowAllResults(true)}
+                            disabled={traditionalSearchQuery.isFetching}
+                            className='mt-3 px-6 py-2 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50'
+                          >
+                            {traditionalSearchQuery.isFetching ? '加载中…' : `查看全部 ${searchTotal} 个结果`}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

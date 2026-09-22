@@ -14,7 +14,6 @@ export async function GET(request: NextRequest) {
   try {
     const config = await getConfig();
 
-    const tvboxProxyConfig = config.TVBoxProxyConfig;
     const videoProxyConfig = config.VideoProxyConfig;
 
     // 测试 Worker 连通性
@@ -44,23 +43,13 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    // 测试两个代理的健康状况
-    const [tvboxHealth, videoHealth] = await Promise.all([
-      tvboxProxyConfig?.enabled && tvboxProxyConfig.proxyUrl
-        ? testWorkerHealth(tvboxProxyConfig.proxyUrl)
-        : Promise.resolve({ healthy: false, error: 'Not enabled' }),
-      videoProxyConfig?.enabled && videoProxyConfig.proxyUrl
-        ? testWorkerHealth(videoProxyConfig.proxyUrl)
-        : Promise.resolve({ healthy: false, error: 'Not enabled' }),
-    ]);
+    // 测试视频代理的健康状况
+    const videoHealth = await (videoProxyConfig?.enabled && videoProxyConfig.proxyUrl
+      ? testWorkerHealth(videoProxyConfig.proxyUrl)
+      : Promise.resolve({ healthy: false, error: 'Not enabled' }));
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
-      tvboxProxy: {
-        enabled: tvboxProxyConfig?.enabled ?? false,
-        proxyUrl: tvboxProxyConfig?.proxyUrl || null,
-        health: tvboxHealth,
-      },
       videoProxy: {
         enabled: videoProxyConfig?.enabled ?? false,
         proxyUrl: videoProxyConfig?.proxyUrl || null,

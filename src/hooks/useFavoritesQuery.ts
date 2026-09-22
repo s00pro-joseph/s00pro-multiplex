@@ -57,7 +57,7 @@ export const favoritesQueryOptions = queryOptions({
 export function useFavoritesQuery(options?: { enabled?: boolean }) {
   return useQuery({
     ...favoritesQueryOptions,
-    enabled: options?.enabled,
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -107,7 +107,7 @@ export function useFavoritesArrayQuery(options?: { enabled?: boolean }) {
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     retry: 1,
-    enabled: options?.enabled,
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -153,6 +153,6 @@ export function useIsFavoritedQuery(
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     retry: 1,
-    enabled: options?.enabled,
+    enabled: options?.enabled ?? true,
   });
 }

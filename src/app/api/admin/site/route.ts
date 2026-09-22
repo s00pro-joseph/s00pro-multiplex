@@ -48,9 +48,6 @@ export async function POST(request: NextRequest) {
       EnableWebLive,
       EnablePuppeteer,
       DoubanCookies,
-      TMDBApiKey,
-      TMDBLanguage,
-      EnableTMDBActorSearch,
       cronConfig,
     } = body as {
       SiteName: string;
@@ -71,9 +68,6 @@ export async function POST(request: NextRequest) {
       EnableWebLive: boolean;
       EnablePuppeteer: boolean;
       DoubanCookies?: string;
-      TMDBApiKey?: string;
-      TMDBLanguage?: string;
-      EnableTMDBActorSearch?: boolean;
       cronConfig?: {
         enableAutoRefresh: boolean;
         maxRecordsPerRun: number;
@@ -132,9 +126,6 @@ export async function POST(request: NextRequest) {
       ShowAdultContent,
       FluidSearch,
       EnableWebLive: EnableWebLive ?? false,
-      TMDBApiKey: TMDBApiKey || '',
-      TMDBLanguage: TMDBLanguage || 'zh-CN',
-      EnableTMDBActorSearch: EnableTMDBActorSearch || false,
     };
 
     // 更新豆瓣配置

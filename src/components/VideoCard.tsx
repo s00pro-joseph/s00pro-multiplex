@@ -207,7 +207,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
   }, [remarks, hasReleaseTag, isAggregate, dynamicSourceNames]);
 
   // 🔥 判断是否应该显示提醒按钮（即将上映或新上映）
-  const isNewRelease = remarks && (remarks.includes('已上映') || remarks.includes('今日上映'));
+  const isNewRelease = !!remarks && (remarks.includes('已上映') || remarks.includes('今日上映'));
   const shouldShowBell = isUpcoming || isNewRelease;
 
   // 🚀 TanStack Query - 获取收藏/提醒状态

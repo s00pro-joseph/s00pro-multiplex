@@ -62,9 +62,7 @@ export class DatabaseCacheManager {
     const stats = {
       douban: { count: 0, size: 0, types: {} as Record<string, number> },
       shortdrama: { count: 0, size: 0, types: {} as Record<string, number> },
-      tmdb: { count: 0, size: 0, types: {} as Record<string, number> },
       bangumi: { count: 0, size: 0, types: {} as Record<string, number> },
-      danmu: { count: 0, size: 0 },
       netdisk: { count: 0, size: 0 },
       youtube: { count: 0, size: 0 },
       bilibili: { count: 0, size: 0 },
@@ -252,18 +250,6 @@ export class DatabaseCacheManager {
           const type = key.split('-')[1];
           stats.shortdrama.types[type] =
             (stats.shortdrama.types[type] || 0) + 1;
-        } else if (key.startsWith('tmdb-')) {
-          stats.tmdb.count++;
-          stats.tmdb.size += size;
-
-          const type = key.split('-')[1];
-          stats.tmdb.types[type] = (stats.tmdb.types[type] || 0) + 1;
-        } else if (
-          key.startsWith('danmu-cache') ||
-          key === 's00pro-multiplex_danmu_cache'
-        ) {
-          stats.danmu.count++;
-          stats.danmu.size += size;
         } else if (key.startsWith('netdisk-search')) {
           stats.netdisk.count++;
           stats.netdisk.size += size;
@@ -305,8 +291,6 @@ export class DatabaseCacheManager {
         formattedSizes: {
           douban: formatBytes(redisStats.douban.size),
           shortdrama: formatBytes(redisStats.shortdrama.size),
-          tmdb: formatBytes(redisStats.tmdb.size),
-          danmu: formatBytes(redisStats.danmu.size),
           netdisk: formatBytes(redisStats.netdisk.size),
           youtube: formatBytes(redisStats.youtube.size),
           bilibili: formatBytes(redisStats.bilibili.size),
@@ -319,9 +303,7 @@ export class DatabaseCacheManager {
     const stats = {
       douban: { count: 0, size: 0, types: {} as Record<string, number> },
       shortdrama: { count: 0, size: 0, types: {} as Record<string, number> },
-      tmdb: { count: 0, size: 0, types: {} as Record<string, number> },
       bangumi: { count: 0, size: 0, types: {} as Record<string, number> },
-      danmu: { count: 0, size: 0 },
       netdisk: { count: 0, size: 0 },
       youtube: { count: 0, size: 0 },
       bilibili: { count: 0, size: 0 },
@@ -334,14 +316,11 @@ export class DatabaseCacheManager {
         (key) =>
           key.startsWith('douban-') ||
           key.startsWith('shortdrama-') ||
-          key.startsWith('tmdb-') ||
-          key.startsWith('danmu-cache') ||
           key.startsWith('netdisk-search') ||
           key.startsWith('youtube-search') ||
           key.startsWith('bilibili-search') ||
           key.startsWith('search-') ||
-          key.startsWith('cache-') ||
-          key === 's00pro-multiplexultiplex_danmu_cache',
+          key.startsWith('cache-'),
       );
 
       console.log(`📊 localStorage中找到 ${keys.length} 个相关缓存键`);
@@ -369,18 +348,6 @@ export class DatabaseCacheManager {
           const type = key.split('-')[1];
           stats.shortdrama.types[type] =
             (stats.shortdrama.types[type] || 0) + 1;
-        } else if (key.startsWith('tmdb-')) {
-          stats.tmdb.count++;
-          stats.tmdb.size += size;
-
-          const type = key.split('-')[1];
-          stats.tmdb.types[type] = (stats.tmdb.types[type] || 0) + 1;
-        } else if (
-          key.startsWith('danmu-cache') ||
-          key === 's00pro-multiplexultiplex_danmu_cache'
-        ) {
-          stats.danmu.count++;
-          stats.danmu.size += size;
         } else if (key.startsWith('netdisk-search')) {
           stats.netdisk.count++;
           stats.netdisk.size += size;
@@ -406,9 +373,7 @@ export class DatabaseCacheManager {
       formattedSizes: {
         douban: formatBytes(stats.douban.size),
         shortdrama: formatBytes(stats.shortdrama.size),
-        tmdb: formatBytes(stats.tmdb.size),
         bangumi: formatBytes(stats.bangumi.size),
-        danmu: formatBytes(stats.danmu.size),
         netdisk: formatBytes(stats.netdisk.size),
         youtube: formatBytes(stats.youtube.size),
         bilibili: formatBytes(stats.bilibili.size),
@@ -422,9 +387,7 @@ export class DatabaseCacheManager {
     type:
       | 'douban'
       | 'shortdrama'
-      | 'tmdb'
       | 'bangumi'
-      | 'danmu'
       | 'netdisk'
       | 'youtube'
       | 'bilibili',
@@ -455,25 +418,6 @@ export class DatabaseCacheManager {
             console.log(`🗑️ localStorage中清理了 ${keys.length} 个短剧缓存项`);
           }
           console.log('🗑️ 短剧缓存清理完成');
-          break;
-        case 'tmdb':
-          await db.clearExpiredCache('tmdb-');
-          // 清理localStorage中的TMDB缓存（兜底）
-          if (typeof localStorage !== 'undefined') {
-            const keys = Object.keys(localStorage).filter((key) =>
-              key.startsWith('tmdb-'),
-            );
-            keys.forEach((key) => {
-              localStorage.removeItem(key);
-              clearedCount++;
-            });
-            console.log(`🗑️ localStorage中清理了 ${keys.length} 个TMDB缓存项`);
-          }
-          console.log('🗑️ TMDB缓存清理完成');
-          break;
-        case 'danmu':
-          await db.clearExpiredCache('danmu-cache');
-          console.log('🗑️ 弹幕缓存清理完成');
           break;
         case 'netdisk':
           await db.clearExpiredCache('netdisk-search');

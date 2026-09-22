@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     searchParams.get('year') === 'all' ? '' : searchParams.get('year');
   const platform =
     searchParams.get('platform') === 'all' ? '' : searchParams.get('platform');
-  const sort = searchParams.get('sort') === 'T' ? '' : searchParams.get('sort');
+  const sort = searchParams.get('sort') || '';
   const label =
     searchParams.get('label') === 'all' ? '' : searchParams.get('label');
 
@@ -102,10 +102,14 @@ export async function GET(request: NextRequest) {
   params.append('refresh', '0');
   params.append('start', pageStart.toString());
   params.append('count', pageLimit.toString());
-  params.append('selected_categories', JSON.stringify(selectedCategories));
+  if (category || format || region) {
+    params.append('selected_categories', JSON.stringify(selectedCategories));
+  }
   params.append('uncollect', 'false');
   params.append('score_range', '0,10');
-  params.append('tags', tags.join(','));
+  if (tags.length > 0) {
+    params.append('tags', tags.join(','));
+  }
   if (sort) {
     params.append('sort', sort);
   }
@@ -113,11 +117,32 @@ export async function GET(request: NextRequest) {
   const target = `${baseUrl}?${params.toString()}`;
   console.log(target);
   try {
-    const doubanData = await fetchDoubanData<DoubanRecommendApiResponse>(
-      target
-    );
-    const list = doubanData.items
+    // 豆瓣在无筛选条件时每页经常返回不足 count 的条数，这里聚合多页直到填满
+    // pageLimit（最多尝试 6 次），避免前端误判“已加载全部”。
+    const collected: DoubanRecommendApiResponse['items'] = [];
+    const seenIds = new Set<string>();
+    let fetchStart = pageStart;
+    for (let attempt = 0; attempt < 6 && collected.length < pageLimit; attempt += 1) {
+      const pagedParams = new URLSearchParams(params);
+      pagedParams.set('start', fetchStart.toString());
+      const batch = await fetchDoubanData<DoubanRecommendApiResponse>(
+        `${baseUrl}?${pagedParams.toString()}`
+      );
+      const items = batch.items ?? [];
+      if (items.length === 0) {
+        break;
+      }
+      for (const item of items) {
+        if (item?.id && !seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          collected.push(item);
+        }
+      }
+      fetchStart += items.length;
+    }
+    const list = collected
       .filter((item) => (item.type == 'movie' || item.type == 'tv') && item.id && item.title)
+      .slice(0, pageLimit)
       .map((item) => ({
         id: item.id,
         title: item.title,
@@ -129,6 +154,7 @@ export async function GET(request: NextRequest) {
       code: 200,
       message: '获取成功',
       list: list,
+      nextStart: fetchStart,
     };
 
     const responseSize = Buffer.byteLength(JSON.stringify(response), 'utf8');

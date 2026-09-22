@@ -2,6 +2,7 @@
 
 import { API_CONFIG, ApiSite, getConfig } from '@/lib/config';
 import { getCachedSearchPage, setCachedSearchPage } from '@/lib/search-cache';
+import { classifyFetchResult, recordSourceResult } from '@/lib/source-health';
 import { SearchResult } from '@/lib/types';
 import { cleanHtmlTags } from '@/lib/utils';
 import { decorateSearchResultQuality } from '@/lib/video-quality';
@@ -79,6 +80,7 @@ async function searchWithCache(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      recordSourceResult(apiSite.key, classifyFetchResult(response.status));
       if (response.status === 403) {
         setCachedSearchPage(apiSite.key, query, page, 'forbidden', []);
       }
@@ -92,7 +94,8 @@ async function searchWithCache(
       !Array.isArray(data.list) ||
       data.list.length === 0
     ) {
-      // 空结果不做负缓存要求，这里不写入缓存
+      // 空结果不做负缓存要求，这里不写入缓存（源本身正常，记 ok）
+      recordSourceResult(apiSite.key, 'ok');
       return { results: [] };
     }
 
@@ -162,9 +165,11 @@ async function searchWithCache(
     const pageCount = page === 1 ? data.pagecount || 1 : undefined;
     // 写入缓存（成功）
     setCachedSearchPage(apiSite.key, query, page, 'ok', results, pageCount);
+    recordSourceResult(apiSite.key, 'ok');
     return { results, pageCount };
   } catch (error: any) {
     clearTimeout(timeoutId);
+    recordSourceResult(apiSite.key, classifyFetchResult(undefined, error));
     // 识别被 AbortController 中止（超时）
     const aborted = error?.name === 'AbortError' || error?.code === 20 || error?.message?.includes('aborted');
     if (aborted) {

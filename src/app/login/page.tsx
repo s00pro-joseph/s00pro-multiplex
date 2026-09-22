@@ -81,6 +81,7 @@ function LoginPageClient() {
   const searchParams = useSearchParams();
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const shouldAskUsername = process.env.NEXT_PUBLIC_STORAGE_TYPE !== 'localstorage';
@@ -177,6 +178,7 @@ function LoginPageClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           password,
+          remember: rememberMe,
           ...(shouldAskUsername ? { username } : {}),
         }),
       });
@@ -345,6 +347,17 @@ function LoginPageClient() {
               <p className='text-xs sm:text-sm text-red-600 dark:text-red-400'>{error}</p>
             </div>
           )}
+
+          {/* 保持登录 */}
+          <label className='flex items-center gap-2 cursor-pointer select-none text-xs sm:text-sm text-gray-600 dark:text-gray-400'>
+            <input
+              type='checkbox'
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className='w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500'
+            />
+            保持登录（否则关闭浏览器后需重新登录）
+          </label>
 
           {/* 登录按钮 */}
           <button

@@ -1,11 +1,9 @@
 'use client';
 
-import { queryOptions,useQuery } from '@tanstack/react-query';
 import {
   Cat,
   Clover,
   Film,
-  FolderOpen,
   Globe,
   Heart,
   History,
@@ -40,31 +38,6 @@ interface SideNavProps {
 const EXPANDED_WIDTH = 200;
 const COLLAPSED_WIDTH = 75;
 const COLLAPSE_KEY = 's00protv_sidenav_collapsed';
-
-const userEmbyConfigOptions = () =>
-  queryOptions({
-    queryKey: ['user', 'emby-config'],
-    queryFn: async () => {
-      const res = await fetch('/api/user/emby-config');
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.config;
-    },
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-
-const publicSourcesOptions = () =>
-  queryOptions({
-    queryKey: ['emby', 'public-sources'],
-    queryFn: async () => {
-      const res = await fetch('/api/emby/public-sources');
-      if (!res.ok) return { sources: [] };
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
 
 const BASE_ITEMS: SideNavItem[] = [
   { icon: Home, label: '首页', href: '/' },
@@ -142,9 +115,6 @@ export default function SideNav({
     );
   };
 
-  const { data: userEmbyConfig } = useQuery(userEmbyConfigOptions());
-  const { data: publicSourcesData } = useQuery(publicSourcesOptions());
-
   const computedCategoryItems = useMemo(() => {
     const runtimeConfig =
       typeof window === 'undefined'
@@ -171,21 +141,8 @@ export default function SideNav({
       });
     }
 
-    const hasUserEmby = userEmbyConfig?.sources?.some(
-      (s: any) => s.enabled && s.ServerURL
-    );
-    const hasPublicEmby = (publicSourcesData?.sources?.length ?? 0) > 0;
-    const hasEmbyInMenu = newItems.some((item) => item.href === '/emby');
-
-    if ((hasUserEmby || hasPublicEmby) && !hasEmbyInMenu) {
-      newItems.push({ icon: FolderOpen, label: 'Emby', href: '/emby' });
-    } else if (!hasUserEmby && !hasPublicEmby && hasEmbyInMenu) {
-      const index = newItems.findIndex((item) => item.href === '/emby');
-      if (index > -1) newItems.splice(index, 1);
-    }
-
     return newItems;
-  }, [userEmbyConfig, publicSourcesData]);
+  }, []);
 
   useEffect(() => {
     // Only update categoryItems if the computed value actually differs from current value
@@ -252,7 +209,7 @@ export default function SideNav({
 
   return (
     <aside
-      className='fixed bottom-0 left-0 top-0 z-50 hidden flex-col border-r border-gray-200/60 bg-white/85 backdrop-blur-xl transition-[width] duration-300 dark:border-gray-700/60 dark:bg-gray-900/85 md:flex'
+      className='fixed bottom-0 left-0 top-0 z-50 hidden flex-col border-r border-white/35 bg-white/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_8px_32px_rgba(0,0,0,0.05)] backdrop-blur-2xl backdrop-saturate-150 transition-[width] duration-300 dark:border-white/15 dark:bg-gray-700/30 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_8px_32px_rgba(0,0,0,0.45)] md:flex'
       style={{ width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
     >
       {/* App 图标 = 展开/折叠开关 + 品牌字（展开时显示） */}

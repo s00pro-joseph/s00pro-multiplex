@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { getAuthInfoFromCookie, getServerSecret } from '@/lib/auth';
 
 // 信任网络配置缓存（从 API 获取）
 let trustedNetworkCache: { enabled: boolean; trustedIPs: string[]; blockAdminAccess: boolean } | null = null;
@@ -103,6 +103,67 @@ async function getTrustedNetworkConfig(request: NextRequest): Promise<{ enabled:
 
   // 尝试从数据库获取（内部已处理禁用状态的缓存优化）
   return await getTrustedNetworkFromAPI(request);
+}
+
+// 初始化状态缓存（从 API 获取，避免每个请求都打库）
+let initStatusCache: boolean | null = null;
+let initStatusCacheTime = 0;
+const INIT_STATUS_TTL = 60 * 1000; // 60 秒
+
+async function getInitStatusFromAPI(request: NextRequest): Promise<boolean> {
+  const now = Date.now();
+  if (initStatusCache !== null && now - initStatusCacheTime < INIT_STATUS_TTL) {
+    return initStatusCache;
+  }
+  try {
+    const url = new URL('/api/auth/status', request.url);
+    const response = await fetch(url.toString(), {
+      headers: { 'x-internal-request': 'true' },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      initStatusCache = data.initialized === true;
+      initStatusCacheTime = now;
+      return initStatusCache;
+    }
+  } catch {
+    // 读不到就当没有，调用方 fail-closed
+  }
+  return false;
+}
+
+// 会话校验缓存（按 cookie 值，30 秒；改密后最多延迟 30 秒全网生效）
+const sessionCheckCache = new Map<string, { ok: boolean; at: number }>();
+const SESSION_CHECK_TTL = 30 * 1000;
+
+async function checkSessionViaAPI(
+  request: NextRequest,
+  rawCookie: string,
+  auth: { username?: string; signature?: string; timestamp?: number; loginTime?: number; trustedNetwork?: boolean; role?: string; pwdv?: number; exp?: number },
+): Promise<boolean> {
+  const now = Date.now();
+  const cached = sessionCheckCache.get(rawCookie);
+  if (cached && now - cached.at < SESSION_CHECK_TTL) return cached.ok;
+  try {
+    const url = new URL('/api/auth/check', request.url);
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-request': 'true',
+      },
+      body: JSON.stringify({ auth }),
+    });
+    const ok = response.ok && ((await response.json()).ok === true);
+    sessionCheckCache.set(rawCookie, { ok, at: now });
+    if (sessionCheckCache.size > 200) {
+      const first = sessionCheckCache.keys().next().value;
+      if (first) sessionCheckCache.delete(first);
+    }
+    return ok;
+  } catch {
+    return false;
+  }
 }
 
 // 常见弱默认密码/凭据黑名单（小写比对）。命中时视同未配置密码，
@@ -243,13 +304,20 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = newPathname || '/';
 
-    // 添加 adult=1 参数（如果还没有）
-    if (!url.searchParams.has('adult')) {
-      url.searchParams.set('adult', '1');
+    // 添加 adult=1 参数（如果还没有；显式写回 search 确保持久化）
+    const params = new URLSearchParams(url.searchParams.toString());
+    if (!params.has('adult')) {
+      params.set('adult', '1');
     }
+    url.search = params.toString();
 
-    // 重写请求
-    const response = NextResponse.rewrite(url);
+    // 重写请求（显式字符串，确保改写后的 query 生效）
+    // 同时经请求头透传成人频道标记（rewrite 在部分版本不保留改写后的 query）
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-adult-channel', '1');
+    const response = NextResponse.rewrite(url.toString(), {
+      request: { headers: requestHeaders },
+    });
 
     // 设置响应头标识成人内容模式
     response.headers.set('X-Content-Mode', 'adult');
@@ -309,10 +377,21 @@ async function handleAuthentication(
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
 
   if (!process.env.PASSWORD) {
-    // s00pro-multiplex localhost own-use: no PASSWORD set = no auth required.
-    // Allow through instead of redirecting to /warning.
-    // Set PASSWORD env later to re-enable login.
-    return response || NextResponse.next();
+    // Fail-closed：无环境密码时看数据库是否有站长。
+    // 无站长 → 只放行初始化路径，其余一律去 /setup；有站长 → 走正常登录流程。
+    const initialized = await getInitStatusFromAPI(request);
+    const isSetupPath =
+      pathname === '/setup' ||
+      pathname.startsWith('/setup/') ||
+      pathname === '/api/auth/setup' ||
+      pathname === '/api/auth/status';
+    if (!initialized) {
+      if (isSetupPath) return response || NextResponse.next();
+      return NextResponse.redirect(new URL('/setup', request.url));
+    }
+    if (isSetupPath && pathname !== '/api/auth/status') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
   }
 
   if (isWeakDefaultCredential(process.env.PASSWORD)) {
@@ -327,6 +406,11 @@ async function handleAuthentication(
   const authInfo = getAuthInfoFromCookie(request);
 
   if (!authInfo) {
+    return handleAuthFailure(request, pathname);
+  }
+
+  // 过期即失效（持久登录 365 天；会话登录靠浏览器 cookie 生命周期）
+  if (authInfo.exp && Date.now() > authInfo.exp) {
     return handleAuthFailure(request, pathname);
   }
 
@@ -361,11 +445,20 @@ async function handleAuthentication(
     const isValidSignature = await verifySignature(
       authInfo.username,
       authInfo.signature,
-      process.env.PASSWORD || ''
+      getServerSecret()
     );
 
     // 签名验证通过即可
     if (isValidSignature) {
+      // 数据库用户：再经内部接口核对密码版本（改密即全网失效，最多 30 秒延迟）
+      if (authInfo.username !== process.env.USERNAME) {
+        const rawCookie =
+          request.cookies.get('user_auth')?.value ||
+          request.cookies.get('auth')?.value ||
+          '';
+        const sessionOk = await checkSessionViaAPI(request, rawCookie, authInfo);
+        if (!sessionOk) return handleAuthFailure(request, pathname);
+      }
       return response || NextResponse.next();
     }
   }
@@ -451,6 +544,6 @@ function shouldSkipAuth(pathname: string): boolean {
 // 配置middleware匹配规则
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|login|register|oidc-register|warning|api/login|api/register|api/logout|api/cron|api/server-config|api/tvbox|api/live/merged|api/parse|api/bing-wallpaper|api/proxy/|api/telegram/|api/auth/oidc/|api/watch-room/).*)',
+    '/((?!_next/static|_next/image|favicon.ico|login|setup|register|oidc-register|warning|api/login|api/register|api/logout|api/auth/setup|api/auth/status|api/auth/check|api/cron|api/server-config|api/live/merged|api/parse|api/bing-wallpaper|api/proxy/|api/telegram/|api/auth/oidc/).*)',
   ],
 };

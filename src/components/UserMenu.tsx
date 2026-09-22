@@ -12,14 +12,11 @@ import {
   KeyRound,
   LogOut,
   Moon,
-  Pencil,
   PlayCircle,
   Settings,
   Shield,
   Sun,
-  Tv,
   User,
-  Users,
   X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -39,7 +36,6 @@ import { VersionPanel } from './VersionPanel';
 import VideoCard from './VideoCard';
 import { SettingsPanel } from './SettingsPanel';
 import {
-  useWatchRoomConfigQuery,
   useServerConfigQuery,
   useVersionCheckQuery,
   usePlayRecordsQuery,
@@ -75,7 +71,6 @@ export const UserMenu: React.FC<{
   const [isWatchingUpdatesOpen, setIsWatchingUpdatesOpen] = useState(false);
   const [isContinueWatchingOpen, setIsContinueWatchingOpen] = useState(false);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [authInfo, setAuthInfo] = useState<AuthInfo | null>(null);
   const [storageType, setStorageType] = useState<string>(() => {
     // 🔧 优化：直接从 RUNTIME_CONFIG 读取初始值，避免默认值导致的多次渲染
@@ -130,8 +125,6 @@ export const UserMenu: React.FC<{
         !dismissedReleases.has(`${series.sourceKey}+${series.videoId}`),
     ).length || 0);
 
-  // 🚀 TanStack Query - 观影室配置
-  const { data: showWatchRoom = false } = useWatchRoomConfigQuery();
   // 🚀 TanStack Query - 下载功能配置
   const { data: serverConfig } = useServerConfigQuery();
   const downloadEnabled = serverConfig?.downloadEnabled ?? true;
@@ -276,16 +269,6 @@ export const UserMenu: React.FC<{
   const handlePlayStats = () => {
     setIsOpen(false);
     router.push('/play-stats');
-  };
-
-  const handleTVBoxConfig = () => {
-    setIsOpen(false);
-    router.push('/tvbox');
-  };
-
-  const handleWatchRoom = () => {
-    setIsOpen(false);
-    router.push('/watch-room');
   };
 
   const handleReleaseCalendar = () => {
@@ -453,69 +436,6 @@ export const UserMenu: React.FC<{
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
   };
 
-  // 头像：localStorage 持久化（压缩至 128px JPEG）
-  const [avatar, setAvatar] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('s00pro-multiplexultiplex_avatar');
-        if (saved) setAvatar(saved);
-      } catch {
-        // 忽略读取失败
-      }
-    }
-  }, []);
-
-  const handleAvatarFile = (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const size = 128;
-      const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        URL.revokeObjectURL(url);
-        return;
-      }
-      // 按短边居中裁剪为正方形
-      const side = Math.min(img.width, img.height);
-      ctx.drawImage(
-        img,
-        (img.width - side) / 2,
-        (img.height - side) / 2,
-        side,
-        side,
-        0,
-        0,
-        size,
-        size,
-      );
-      URL.revokeObjectURL(url);
-      try {
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-        setAvatar(dataUrl);
-        localStorage.setItem('s00pro-multiplexultiplex_avatar', dataUrl);
-      } catch {
-        // 存储失败（如配额不足）则仅内存显示
-      }
-    };
-    img.src = url;
-  };
-
-  const handleRemoveAvatar = () => {
-    setAvatar(null);
-    try {
-      localStorage.removeItem('s00pro-multiplexultiplex_avatar');
-    } catch {
-      // 忽略
-    }
-  };
-
   // 检查是否显示管理面板按钮
   const showAdminPanel =
     authInfo?.role === 'owner' || authInfo?.role === 'admin';
@@ -589,16 +509,6 @@ export const UserMenu: React.FC<{
                   <div className='font-semibold text-gray-900 dark:text-gray-100 text-sm truncate'>
                     {authInfo?.username || 'default'}
                   </div>
-                  <button
-                    onClick={() => {
-                      setIsOpen(false);
-                      setIsProfileOpen(true);
-                    }}
-                    className='shrink-0 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 transition-colors'
-                    aria-label='编辑资料'
-                  >
-                    <Pencil className='h-3 w-3' />
-                  </button>
                 </div>
                 <div className='text-[10px] text-gray-400 dark:text-gray-500'>
                   数据存储：
@@ -706,26 +616,6 @@ export const UserMenu: React.FC<{
                 <Calendar className='w-4 h-4 text-gray-500 dark:text-gray-400' />
                 <span className='font-medium'>上映日程</span>
               </button>
-
-              {/* TVBox配置按钮 */}
-              <button
-                onClick={handleTVBoxConfig}
-                className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-              >
-                <Tv className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-                <span className='font-medium'>TVBox 配置</span>
-              </button>
-
-              {/* 观影室按钮 */}
-              {showWatchRoom && (
-                <button
-                  onClick={handleWatchRoom}
-                  className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-[background-color] duration-150 ease-in-out text-sm'
-                >
-                  <Users className='w-4 h-4 text-gray-500 dark:text-gray-400' />
-                  <span className='font-medium'>观影室</span>
-                </button>
-              )}
 
               {/* 下载管理按钮 */}
               {downloadEnabled && (
@@ -1444,12 +1334,6 @@ export const UserMenu: React.FC<{
 
           {isSettingsVariant ? (
             <Settings className='w-full h-full relative z-10 group-hover:rotate-90 transition-transform duration-300' />
-          ) : avatar ? (
-            <img
-              src={avatar}
-              alt='头像'
-              className='absolute inset-0 z-10 h-full w-full rounded-full object-cover'
-            />
           ) : (
             <User className='w-full h-full relative z-10 group-hover:scale-110 transition-transform duration-300' />
           )}
@@ -1489,88 +1373,6 @@ export const UserMenu: React.FC<{
       {isFavoritesOpen &&
         mounted &&
         createPortal(favoritesPanel, document.body)}
-
-      {/* 个人资料弹窗（头像管理） */}
-      {isProfileOpen &&
-        mounted &&
-        createPortal(
-          <>
-            <div
-              className='fixed inset-0 bg-black/50 backdrop-blur-sm z-1000'
-              onClick={() => setIsProfileOpen(false)}
-            />
-            <div className='fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xs bg-white dark:bg-gray-900 rounded-xl shadow-xl z-1001 overflow-hidden p-5'>
-              <h3 className='mb-4 text-base font-bold text-gray-900 dark:text-gray-100'>
-                个人资料
-              </h3>
-
-              <div className='mb-4 flex flex-col items-center gap-3'>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className='relative h-20 w-20 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 ring-2 ring-gray-200 dark:ring-gray-700 transition hover:ring-blue-400'
-                  aria-label='更换头像'
-                >
-                  {avatar ? (
-                    <img
-                      src={avatar}
-                      alt='头像'
-                      className='h-full w-full object-cover'
-                    />
-                  ) : (
-                    <User className='h-full w-full p-4 text-gray-400' />
-                  )}
-                  <span className='absolute inset-x-0 bottom-0 bg-black/50 py-0.5 text-center text-[10px] text-white'>
-                    更换
-                  </span>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type='file'
-                  accept='image/*'
-                  className='hidden'
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleAvatarFile(file);
-                    e.target.value = '';
-                  }}
-                />
-                {avatar && (
-                  <button
-                    onClick={handleRemoveAvatar}
-                    className='text-xs text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 transition-colors'
-                  >
-                    移除头像
-                  </button>
-                )}
-              </div>
-
-              <div className='mb-5 space-y-2 text-sm'>
-                <div className='flex items-center justify-between'>
-                  <span className='text-gray-500 dark:text-gray-400'>
-                    用户名
-                  </span>
-                  <span className='font-medium text-gray-900 dark:text-gray-100'>
-                    {authInfo?.username || 'default'}
-                  </span>
-                </div>
-                <div className='flex items-center justify-between'>
-                  <span className='text-gray-500 dark:text-gray-400'>角色</span>
-                  <span className='font-medium text-gray-900 dark:text-gray-100'>
-                    {getRoleText(authInfo?.role || 'user')}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setIsProfileOpen(false)}
-                className='w-full rounded-lg bg-linear-to-r from-blue-500 to-purple-500 px-4 py-2 text-sm font-medium text-white shadow-md transition-all duration-200 hover:shadow-lg'
-              >
-                完成
-              </button>
-            </div>
-          </>,
-          document.body,
-        )}
 
       {/* 版本面板 */}
       <VersionPanel

@@ -20,7 +20,6 @@ import NavigationShell from '../components/NavigationShell';
 import QueryProvider from '../components/QueryProvider';
 import { SiteProvider } from '../components/SiteProvider';
 import { ThemeProvider } from '../components/ThemeProvider';
-import { WatchRoomProvider } from '../components/WatchRoomProvider';
 import { DownloadProvider } from '../contexts/DownloadContext';
 import { GlobalCacheProvider } from '../contexts/GlobalCacheContext';
 
@@ -37,9 +36,6 @@ const SessionTracker = nextDynamic(() =>
 const RouteWarmup = nextDynamic(() => import('../components/RouteWarmup'));
 const DownloadPanel = nextDynamic(() =>
   import('../components/download/DownloadPanel').then((m) => m.DownloadPanel),
-);
-const ChatFloatingWindow = nextDynamic(
-  () => import('../components/watch-room/ChatFloatingWindow'),
 );
 
 const inter = Inter({ subsets: ['latin'] });
@@ -94,7 +90,6 @@ export default async function RootLayout({
   let enableWebLive = false;
   let customAdFilterVersion = 0;
   let aiRecommendEnabled = false;
-  let embyEnabled = false;
   let videoProxyEnabled = false;
   let videoProxyUrl = '';
   let customCategories = [] as {
@@ -123,12 +118,6 @@ export default async function RootLayout({
     enableWebLive = config.SiteConfig.EnableWebLive ?? false;
     customAdFilterVersion = config.SiteConfig?.CustomAdFilterVersion || 0;
     aiRecommendEnabled = config.AIRecommendConfig?.enabled ?? false;
-    // 检查是否启用了 Emby 功能（支持多源）
-    embyEnabled = !!(
-      config.EmbyConfig?.Sources &&
-      config.EmbyConfig.Sources.length > 0 &&
-      config.EmbyConfig.Sources.some((s) => s.enabled && s.ServerURL)
-    );
     videoProxyEnabled = config.VideoProxyConfig?.enabled ?? false;
     videoProxyUrl = config.VideoProxyConfig?.proxyUrl || '';
   }
@@ -149,8 +138,6 @@ export default async function RootLayout({
     ENABLE_WEB_LIVE: enableWebLive,
     CUSTOM_AD_FILTER_VERSION: customAdFilterVersion,
     AI_RECOMMEND_ENABLED: aiRecommendEnabled,
-    EMBY_ENABLED: embyEnabled,
-    PRIVATE_LIBRARY_ENABLED: embyEnabled,
     VIDEO_PROXY_ENABLED: videoProxyEnabled,
     VIDEO_PROXY_URL: videoProxyUrl,
     // 禁用预告片：Vercel 自动检测，或用户手动设置 DISABLE_HERO_TRAILER=true
@@ -208,8 +195,7 @@ export default async function RootLayout({
           <QueryProvider>
             <GlobalCacheProvider>
               <DownloadProvider>
-                <WatchRoomProvider>
-                  <SiteProvider siteName={siteName} announcement={announcement}>
+                <SiteProvider siteName={siteName} announcement={announcement}>
                     <GlobalDOMErrorHandler />
                     <ChunkErrorGuard />
                     <TranslationWarningToast />
@@ -237,9 +223,7 @@ export default async function RootLayout({
                   </SiteProvider>
                   <Suspense fallback={null}>
                     <DownloadPanel />
-                    <ChatFloatingWindow />
                   </Suspense>
-                </WatchRoomProvider>
               </DownloadProvider>
             </GlobalCacheProvider>
           </QueryProvider>

@@ -231,6 +231,31 @@ export class UpstashRedisStorage implements IStorage {
     return `u:${user}:pwd`;
   }
 
+  private userPwdVerKey(user: string) {
+    return `u:${user}:pwdver`;
+  }
+
+  async getPwdVersion(userName: string): Promise<number> {
+    const v = await withRetry(() => this.client.get(this.userPwdVerKey(userName)));
+    return Number(ensureString(v as any) || 0) || 0;
+  }
+
+  async hasAnyOwner(): Promise<boolean> {
+    if (process.env.USERNAME && process.env.PASSWORD) return true;
+    try {
+      const members = (await withRetry(() =>
+        this.client.zrange(this.userListKey(), 0, -1),
+      )) as string[];
+      for (const m of members || []) {
+        const info = await this.getUserInfoV2(m);
+        if (info?.role === 'owner' && !info.banned) return true;
+      }
+    } catch {
+      // 读不到就当没有，调用方 fail-closed
+    }
+    return false;
+  }
+
   async registerUser(userName: string, password: string): Promise<void> {
     const hashed = hashPwd(password);
     await withRetry(() => this.client.set(this.userPwdKey(userName), hashed));
@@ -264,12 +289,14 @@ export class UpstashRedisStorage implements IStorage {
   async changePassword(userName: string, newPassword: string): Promise<void> {
     const hashed = hashPwd(newPassword);
     await withRetry(() => this.client.set(this.userPwdKey(userName), hashed));
+    await withRetry(() => this.client.incr(this.userPwdVerKey(userName)));
   }
 
   // 删除用户及其所有数据
   async deleteUser(userName: string): Promise<void> {
     // 删除用户密码 (V1)
     await withRetry(() => this.client.del(this.userPwdKey(userName)));
+    await withRetry(() => this.client.del(this.userPwdVerKey(userName)));
 
     // 删除用户信息 (V2)
     await withRetry(() => this.client.del(this.userInfoKey(userName)));
@@ -1512,40 +1539,6 @@ export class UpstashRedisStorage implements IStorage {
       console.log(`用户 ${userName} 登入统计已更新:`, loginStats);
     } catch (error) {
       console.error(`更新用户 ${userName} 登入统计失败:`, error);
-      throw error;
-    }
-  }
-
-  // ---------- 用户 Emby 配置 ----------
-  async getUserEmbyConfig(userName: string): Promise<any | null> {
-    try {
-      const key = `u:${userName}:emby-config`;
-      const data = await withRetry(() => this.client.get(key));
-      return data || null;
-    } catch (error) {
-      console.error(`获取用户 ${userName} Emby 配置失败:`, error);
-      return null;
-    }
-  }
-
-  async saveUserEmbyConfig(userName: string, config: any): Promise<void> {
-    try {
-      const key = `u:${userName}:emby-config`;
-      await withRetry(() => this.client.set(key, config));
-      console.log(`用户 ${userName} Emby 配置已保存`);
-    } catch (error) {
-      console.error(`保存用户 ${userName} Emby 配置失败:`, error);
-      throw error;
-    }
-  }
-
-  async deleteUserEmbyConfig(userName: string): Promise<void> {
-    try {
-      const key = `u:${userName}:emby-config`;
-      await withRetry(() => this.client.del(key));
-      console.log(`用户 ${userName} Emby 配置已删除`);
-    } catch (error) {
-      console.error(`删除用户 ${userName} Emby 配置失败:`, error);
       throw error;
     }
   }

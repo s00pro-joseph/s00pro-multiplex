@@ -18,10 +18,6 @@ export interface AdminConfig {
     ShowAdultContent: boolean; // 是否显示成人内容，默认 false
     FluidSearch: boolean;
     EnableWebLive: boolean;
-    // TMDB配置
-    TMDBApiKey?: string;
-    TMDBLanguage?: string;
-    EnableTMDBActorSearch?: boolean;
     // Bangumi API 代理
     BangumiApiType?: string;
     BangumiApiProxy?: string;
@@ -37,8 +33,6 @@ export interface AdminConfig {
   UserConfig: {
     AllowRegister?: boolean; // 是否允许用户注册，默认 true
     RequireInviteCode?: boolean; // 是否需要邀请码注册，默认 false
-    AutoCleanupInactiveUsers?: boolean; // 是否自动清理非活跃用户，默认 false
-    InactiveUserDays?: number; // 非活跃用户保留天数，默认 7
     Users: {
       username: string;
       role: 'user' | 'admin' | 'owner';
@@ -46,29 +40,8 @@ export interface AdminConfig {
       enabledApis?: string[]; // 优先级高于tags限制（网站内搜索用）
       tags?: string[]; // 多 tags 取并集限制
       createdAt?: number; // 用户注册时间戳
-      tvboxToken?: string; // 用户专属的 TVBox Token
-      tvboxEnabledSources?: string[]; // TVBox 可访问的源（为空则返回所有源）
       showAdultContent?: boolean; // 用户级别的成人内容显示控制
       oidcSub?: string; // OIDC的唯一标识符(sub字段)
-      embyConfig?: {
-        sources: Array<{
-          key: string;                       // 唯一标识
-          name: string;                      // 显示名称
-          enabled: boolean;                  // 是否启用
-          ServerURL: string;                 // Emby服务器地址
-          ApiKey?: string;                   // API Key（推荐方式）
-          Username?: string;                 // 用户名
-          Password?: string;                 // 密码
-          UserId?: string;                   // 用户ID
-          AuthToken?: string;                // 认证令牌
-          Libraries?: string[];              // 媒体库ID
-          removeEmbyPrefix?: boolean;        // 移除/emby前缀
-          appendMediaSourceId?: boolean;     // 拼接MediaSourceId参数
-          transcodeMp4?: boolean;            // 转码mp4
-          proxyPlay?: boolean;               // 视频播放代理
-          embyAuthorizationHeader?: string;  // 自定义 X-Emby-Authorization 头
-        }>;
-      };
     }[];
     Tags?: {
       name: string;
@@ -86,6 +59,12 @@ export interface AdminConfig {
     is_adult?: boolean;
     type?: 'vod' | 'shortdrama'; // 视频源类型：vod=普通视频，shortdrama=短剧（系统会自动查找"短剧"分类）
     weight?: number; // 优先级权重：0-100，数字越大优先级越高，默认50。播放时先按权重排序，同权重再按测速结果
+    tier?: 'stable' | 'deep' | 'fast'; // 源分档：stable=稳定、deep=片库深、fast=速度快（搜索 9-actives 用）
+    health?: 'valid' | 'no_results' | 'invalid'; // 有效性检测结果（导入 routine / 有效性检测按钮写入）
+    healthCheckedAt?: number; // 上次检测时间戳
+    healthReason?: string; // 检测失败原因
+    probeMs?: number; // 存活检测往返毫秒（速度度量）
+    probeResources?: number; // 存活检测到的全库总量（搜索排序：越大越优先）
   }[];
   CustomCategories: {
     name?: string;
@@ -100,7 +79,6 @@ export interface AdminConfig {
     url: string;  // m3u 地址
     ua?: string;
     epg?: string; // 节目单
-    isTvBox?: boolean;
     from: 'config' | 'custom';
     channelNumber?: number;
     disabled?: boolean;
@@ -133,18 +111,6 @@ export interface AdminConfig {
     maxResults: number;                  // 每页最大搜索结果数
     enabledRegions: string[];            // 启用的地区代码列表
     enabledCategories: string[];         // 启用的视频分类列表
-  };
-  TVBoxSecurityConfig?: {
-    enableAuth: boolean;                 // 是否启用Token验证
-    token: string;                       // 访问Token
-    enableIpWhitelist: boolean;          // 是否启用IP白名单
-    allowedIPs: string[];               // 允许的IP地址列表
-    enableRateLimit: boolean;            // 是否启用频率限制
-    rateLimit: number;                   // 每分钟允许的请求次数
-  };
-  TVBoxProxyConfig?: {
-    enabled: boolean;                    // 是否为TVBox启用Cloudflare Worker代理
-    proxyUrl: string;                    // Cloudflare Worker代理地址（例如：https://corsapi.smone.workers.dev）
   };
   VideoProxyConfig?: {
     enabled: boolean;                    // 是否为普通视频源启用Cloudflare Worker代理
@@ -195,11 +161,6 @@ export interface AdminConfig {
   DownloadConfig?: {
     enabled: boolean;                    // 是否启用下载功能（全局开关）
   };
-  WatchRoomConfig?: {
-    enabled: boolean;                    // 是否启用观影室功能
-    serverUrl: string;                   // 外部观影室服务器地址
-    authKey: string;                     // 观影室服务器认证密钥
-  };
   DoubanConfig?: {
     enablePuppeteer: boolean;            // 是否启用 Puppeteer 绕过 Challenge（默认 false）
     cookies?: string;                    // 豆瓣认证 Cookies（包含 dbcl2, frodotk_db, ck 等）
@@ -215,38 +176,6 @@ export interface AdminConfig {
     enabled: boolean;                    // 是否启用信任网络模式（内网免登录）
     trustedIPs: string[];               // 信任的IP/CIDR列表（如 192.168.0.0/16, 10.0.0.0/8）
     blockAdminAccess?: boolean;          // 是否禁止信任网络访客访问后台（默认 false 保持现状）
-  };
-  DanmuApiConfig?: {
-    enabled: boolean;                    // 是否启用弹幕API（默认启用）
-    useCustomApi: boolean;               // 是否使用自定义API（false则使用默认API）
-    customApiUrl: string;                // 自定义弹幕API地址
-    customToken: string;                 // 自定义API Token
-    timeout: number;                     // 请求超时时间（秒），默认15
-  };
-  EmbyConfig?: {
-    // 多源配置
-    Sources?: Array<{
-      key: string;                       // 唯一标识，如 'emby1', 'emby2'
-      name: string;                      // 显示名称，如 '家庭Emby', '公司Emby'
-      enabled: boolean;                  // 是否启用
-      ServerURL: string;                 // Emby服务器地址
-      ApiKey?: string;                   // API Key（推荐方式）
-      Username?: string;                 // 用户名（或使用API Key）
-      Password?: string;                 // 密码
-      UserId?: string;                   // 用户ID（登录后获取）
-      AuthToken?: string;                // 认证令牌（用户名密码登录后获取）
-      Libraries?: string[];              // 要显示的媒体库ID（可选，默认全部）
-      LastSyncTime?: number;             // 最后同步时间戳
-      ItemCount?: number;                // 媒体项数量
-      isDefault?: boolean;               // 是否为默认源（用于向后兼容）
-      isPublic?: boolean;                // 是否对所有用户开放（公共源）
-      // 高级流媒体选项
-      removeEmbyPrefix?: boolean;        // 播放链接移除/emby前缀
-      appendMediaSourceId?: boolean;     // 拼接MediaSourceId参数
-      transcodeMp4?: boolean;            // 转码mp4
-      proxyPlay?: boolean;               // 视频播放代理开关
-      embyAuthorizationHeader?: string;  // 自定义 X-Emby-Authorization 头
-    }>;
   };
   CustomSpiderJar?: string;              // 自定义 Spider JAR URL（全局配置）
   BilibiliConfig?: {

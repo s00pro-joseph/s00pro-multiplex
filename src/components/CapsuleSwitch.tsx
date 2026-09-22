@@ -95,9 +95,9 @@ const CapsuleSwitch: React.FC<CapsuleSwitchProps> = ({
         ref={containerRef}
         className={`relative ${
           isVertical
-            ? 'flex w-full flex-col items-stretch gap-0.5 rounded-2xl p-1 shadow-[inset_0_2px_6px_rgba(0,0,0,0.12)] dark:shadow-[inset_0_2px_6px_rgba(0,0,0,0.45)]'
+            ? 'flex w-full flex-col items-stretch gap-2 rounded-2xl border border-gray-500/25 p-2 shadow-[inset_0_3px_0_rgba(0,0,0,0.25),inset_0_3px_0_rgba(0,0,0,0.25),inset_0_-3px_0_rgba(180,180,180,0.15)] dark:border-black/10 dark:gray-800/35 dark:shadow-[inset_0_3px_0_rgba(0,0,0,0.5),inset_0_3px_2px_rgba(0,0,0,0.05),inset_0_-3px_0_rgba(180,180,180,0.15)]'
             : 'inline-flex rounded-full p-1 shadow-lg'
-        } bg-linear-to-r from-gray-200 via-gray-300 to-gray-200 dark:from-gray-800 dark:via-gray-700 dark:to-gray-800 ${
+        } dark:border-black/10 bg-linear-to-r from-white/5 via-black/50 to-white/0.5 dark:from-white/0.05 dark:via-transparent dark:to-white/0.05 ${
           className || ''
         }`}
       >

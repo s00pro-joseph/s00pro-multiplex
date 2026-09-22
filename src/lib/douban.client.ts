@@ -824,9 +824,6 @@ async function fetchDoubanRecommends(
   if (platform === 'all') {
     platform = '';
   }
-  if (sort === 'T') {
-    sort = '';
-  }
 
   const selectedCategories = { 类型: category } as any;
   if (format) {
@@ -863,20 +860,27 @@ async function fetchDoubanRecommends(
       : useAliCDN
         ? `https://m.douban.cmliussss.com/rexxar/api/v2/${kind}/recommend`
         : `https://m.douban.com/rexxar/api/v2/${kind}/recommend`;
-  const reqParams = new URLSearchParams();
-  reqParams.append('refresh', '0');
-  reqParams.append('start', pageStart.toString());
-  reqParams.append('count', pageLimit.toString());
-  reqParams.append('selected_categories', JSON.stringify(selectedCategories));
-  reqParams.append('uncollect', 'false');
-  reqParams.append('score_range', '0,10');
-  reqParams.append('tags', tags.join(','));
+  const baseParams = new URLSearchParams({
+    refresh: '0',
+    count: pageLimit.toString(),
+    selected_categories: JSON.stringify(selectedCategories),
+    uncollect: 'false',
+    score_range: '0,10',
+    tags: tags.join(','),
+  });
   if (sort) {
-    reqParams.append('sort', sort);
+    baseParams.append('sort', sort);
   }
-  const target = `${baseUrl}?${reqParams.toString()}`;
-  console.log(target);
+  // 无筛选时豆瓣经常返回不足 count 的条数，聚合多页直到填满 pageLimit
+  const collected: DoubanRecommendApiResponse['items'] = [];
+  const seenIds = new Set<string>();
+  let fetchStart = pageStart;
   try {
+  for (let attempt = 0; attempt < 6 && collected.length < pageLimit; attempt += 1) {
+    const reqParams = new URLSearchParams(baseParams);
+    reqParams.set('start', fetchStart.toString());
+    const target = `${baseUrl}?${reqParams.toString()}`;
+    console.log(target);
     const response = await fetchWithTimeout(
       target,
       useTencentCDN || useAliCDN ? '' : proxyUrl
@@ -887,8 +891,23 @@ async function fetchDoubanRecommends(
     }
 
     const doubanData: DoubanRecommendApiResponse = await response.json();
-    const list: DoubanItem[] = doubanData.items
-      .filter((item) => (item.type == 'movie' || item.type == 'tv') && item.id && item.title)
+    const items = doubanData.items ?? [];
+    if (items.length === 0) {
+      break;
+    }
+    for (const item of items) {
+      // 类型过滤前移：只收集可展示的 movie/tv，否则 全部+综合 这类无筛选会因混入综艺而每页少几条
+      if (item?.type != 'movie' && item?.type != 'tv') continue;
+      if (item?.id && !seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        collected.push(item);
+      }
+    }
+    fetchStart += items.length;
+  }
+    const list: DoubanItem[] = collected
+      .filter((item) => item.id && item.title)
+      .slice(0, pageLimit)
       .map((item) => ({
         id: item.id,
         title: item.title,
@@ -901,6 +920,7 @@ async function fetchDoubanRecommends(
       code: 200,
       message: '获取成功',
       list: list,
+      nextStart: fetchStart,
     };
   } catch (error) {
     throw new Error(`获取豆瓣推荐数据失败: ${(error as Error).message}`);

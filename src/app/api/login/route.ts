@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { getServerSecret } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
@@ -102,12 +103,14 @@ async function generateSignature(
 }
 
 // 生成认证Cookie（带签名）
+// remember=true → 365 天持久；false → 浏览器会话有效（关闭即失效）
 async function generateAuthCookie(
   username?: string,
   password?: string,
   role?: 'owner' | 'admin' | 'user',
-  includePassword = false
-): Promise<string> {
+  includePassword = false,
+  opts: { pwdv?: number; remember?: boolean } = {},
+): Promise<{ value: string; expires?: Date }> {
   const authData: any = { role: role || 'user' };
 
   // 只在需要时包含 password
@@ -115,16 +118,39 @@ async function generateAuthCookie(
     authData.password = password;
   }
 
-  if (username && process.env.PASSWORD) {
+  let expires: Date | undefined;
+  if (username && getServerSecret()) {
     authData.username = username;
-    // 使用密码作为密钥对用户名进行签名
-    const signature = await generateSignature(username, process.env.PASSWORD);
+    // 使用服务端密钥对用户名进行签名
+    const signature = await generateSignature(username, getServerSecret());
     authData.signature = signature;
     authData.timestamp = Date.now(); // 添加时间戳防重放攻击
     authData.loginTime = Date.now(); // 添加登入时间记录
+    if (typeof opts.pwdv === 'number') {
+      authData.pwdv = opts.pwdv; // 数据库用户密码版本
+    }
+    if (opts.remember) {
+      expires = new Date();
+      expires.setDate(expires.getDate() + 365);
+      authData.exp = expires.getTime();
+    }
   }
 
-  return encodeURIComponent(JSON.stringify(authData));
+  return { value: encodeURIComponent(JSON.stringify(authData)), expires };
+}
+
+function setAuthCookie(
+  response: NextResponse,
+  cookie: { value: string; expires?: Date },
+  useSecureCookie: boolean,
+) {
+  response.cookies.set('user_auth', cookie.value, {
+    path: '/',
+    ...(cookie.expires ? { expires: cookie.expires } : {}),
+    sameSite: 'lax', // 改为 lax 以支持 PWA
+    httpOnly: false, // PWA 需要客户端可访问
+    secure: useSecureCookie,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -158,7 +184,7 @@ export async function POST(req: NextRequest) {
         return response;
       }
 
-      const { password } = await req.json();
+      const { password, remember } = await req.json();
       if (typeof password !== 'string') {
         return NextResponse.json({ error: '密码不能为空' }, { status: 400 });
       }
@@ -177,24 +203,17 @@ export async function POST(req: NextRequest) {
         undefined,
         password,
         'user',
-        true
+        true,
+        { remember: remember === true },
       ); // localstorage 模式包含 password
-      const expires = new Date();
-      expires.setDate(expires.getDate() + 7); // 7天过期
 
-      response.cookies.set('user_auth', cookieValue, {
-        path: '/',
-        expires,
-        sameSite: 'lax', // 改为 lax 以支持 PWA
-        httpOnly: false, // PWA 需要客户端可访问
-        secure: false, // 根据协议自动设置
-      });
+      setAuthCookie(response, cookieValue, useSecureCookie);
 
       return response;
     }
 
     // 数据库 / redis 模式——校验用户名并尝试连接数据库
-    const { username, password } = await req.json();
+    const { username, password, remember } = await req.json();
 
     if (!username || typeof username !== 'string') {
       return NextResponse.json({ error: '用户名不能为空' }, { status: 400 });
@@ -214,18 +233,11 @@ export async function POST(req: NextRequest) {
         username,
         password,
         'owner',
-        false
+        false,
+        { remember: remember === true },
       ); // 数据库模式不包含 password
-      const expires = new Date();
-      expires.setDate(expires.getDate() + 7); // 7天过期
 
-      response.cookies.set('user_auth', cookieValue, {
-        path: '/',
-        expires,
-        sameSite: 'lax', // 改为 lax 以支持 PWA
-        httpOnly: false, // PWA 需要客户端可访问
-        secure: false, // 根据协议自动设置
-      });
+      setAuthCookie(response, cookieValue, useSecureCookie);
 
       return response;
     } else if (username === process.env.USERNAME) {
@@ -253,22 +265,16 @@ export async function POST(req: NextRequest) {
 
       // 验证成功，设置认证cookie
       const response = NextResponse.json({ ok: true });
+      const pwdv = await db.getPwdVersion(username);
       const cookieValue = await generateAuthCookie(
         username,
         password,
         user?.role || 'user',
-        false
+        false,
+        { pwdv, remember: remember === true },
       );
-      const expires = new Date();
-      expires.setDate(expires.getDate() + 7); // 7天过期
 
-      response.cookies.set('user_auth', cookieValue, {
-        path: '/',
-        expires,
-        sameSite: 'lax',
-        httpOnly: false,
-        secure: false,
-      });
+      setAuthCookie(response, cookieValue, useSecureCookie);
 
       return response;
     } catch (err) {
