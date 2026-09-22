@@ -287,6 +287,22 @@ export class DbManager {
     await this.storage.changePassword(userName, newPassword);
   }
 
+  async getPwdVersion(userName: string): Promise<number> {
+    incrementDbQuery();
+    if (typeof (this.storage as any).getPwdVersion === 'function') {
+      return (this.storage as any).getPwdVersion(userName);
+    }
+    return 0;
+  }
+
+  async hasAnyOwner(): Promise<boolean> {
+    incrementDbQuery();
+    if (typeof (this.storage as any).hasAnyOwner === 'function') {
+      return (this.storage as any).hasAnyOwner();
+    }
+    return !!(process.env.USERNAME && process.env.PASSWORD);
+  }
+
   async deleteUser(userName: string): Promise<void> {
     incrementDbQuery();
     await this.storage.deleteUser(userName);
@@ -636,6 +652,13 @@ export class DbManager {
     }
   }
 
+  async updateUserStats(userName: string, stats: UserPlayStat): Promise<void> {
+    incrementDbQuery();
+    if (typeof (this.storage as any).updateUserStats === 'function') {
+      await (this.storage as any).updateUserStats(userName, stats);
+    }
+  }
+
   // 删除 V1 用户密码数据（用于 V1→V2 迁移）
   async deleteV1Password(userName: string): Promise<void> {
     incrementDbQuery();
@@ -649,29 +672,6 @@ export class DbManager {
   isStatsSupported(): boolean {
     const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'sqlite';
     return storageType !== 'localstorage';
-  }
-
-  // 用户 Emby 配置相关方法
-  async getUserEmbyConfig(userName: string): Promise<any | null> {
-    incrementDbQuery();
-    if (typeof (this.storage as any).getUserEmbyConfig === 'function') {
-      return (this.storage as any).getUserEmbyConfig(userName);
-    }
-    return null;
-  }
-
-  async saveUserEmbyConfig(userName: string, config: any): Promise<void> {
-    incrementDbQuery();
-    if (typeof (this.storage as any).saveUserEmbyConfig === 'function') {
-      await (this.storage as any).saveUserEmbyConfig(userName, config);
-    }
-  }
-
-  async deleteUserEmbyConfig(userName: string): Promise<void> {
-    incrementDbQuery();
-    if (typeof (this.storage as any).deleteUserEmbyConfig === 'function') {
-      await (this.storage as any).deleteUserEmbyConfig(userName);
-    }
   }
 
   // 崩溃日志相关方法

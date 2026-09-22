@@ -138,10 +138,11 @@ export async function POST(request: NextRequest) {
     if (!db.isStatsSupported()) {
       return NextResponse.json(
         {
-          error: '当前存储类型不支持播放统计功能，请使用 SQLite、Redis、Upstash 或 Kvrocks',
-          supportedTypes: ['sqlite', 'redis', 'upstash', 'kvrocks']
+          error:
+            '当前存储类型不支持播放统计功能，请使用 SQLite、Redis、Upstash 或 Kvrocks',
+          supportedTypes: ['sqlite', 'redis', 'upstash', 'kvrocks'],
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -151,7 +152,7 @@ export async function POST(request: NextRequest) {
     // 检查用户权限
     if (authInfo.username !== username) {
       const user = config.UserConfig.Users.find(
-        (u) => u.username === authInfo.username
+        (u) => u.username === authInfo.username,
       );
       if (!user) {
         return NextResponse.json({ error: '用户不存在' }, { status: 401 });
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
     if (typeof watchTime !== 'number' || !movieKey || !timestamp) {
       return NextResponse.json(
         { error: '参数错误：需要 watchTime, movieKey, timestamp' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -184,16 +185,15 @@ export async function POST(request: NextRequest) {
       // 更新首次观看时间（如果还没有设置）
       firstWatchDate: currentStats.firstWatchDate || timestamp,
       // 简单的影片数量统计（这里可以进一步优化为精确去重）
-      totalMovies: currentStats.totalMovies || currentStats.totalPlays || 1
+      totalMovies: currentStats.totalMovies || currentStats.totalPlays || 1,
     };
 
-    // 更新统计数据（这里需要扩展存储层支持）
-    // TODO: 需要在存储层添加 updateUserStats 方法
-    console.log('更新用户统计数据:', updatedStats);
+    // 更新统计数据到存储层
+    await db.updateUserStats(authInfo.username, updatedStats);
 
     return NextResponse.json({
       success: true,
-      userStats: updatedStats
+      userStats: updatedStats,
     });
   } catch (error) {
     console.error('POST /api/user/my-stats - 详细错误信息:', error);

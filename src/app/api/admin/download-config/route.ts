@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { enabled } = body;
+    const { enabled, allowStreamMode } = body;
 
     // 获取当前配置
     const config = await getConfig();
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
     // 更新下载配置
     config.DownloadConfig = {
       enabled: enabled ?? true,
+      allowStreamMode: allowStreamMode ?? true,
     };
 
     // 保存到数据库

@@ -1,17 +1,20 @@
 {
-  "css.validate": false,
-  "editor.formatOnSave": true,
-  "editor.tabSize": 2,
-  "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit"
+  "debug.javascript.defaultRuntimeExecutable": {
+    "pwa-node": "${workspaceFolder}\\.vscode\\mise-tools\\node"
   },
-  "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-  // Tailwind CSS Autocomplete, add more if used in projects
-  "tailwindCSS.classAttributes": [
-    "class",
-    "className",
-    "classNames",
-    "containerClassName"
-  ],
-  "typescript.preferences.importModuleSpecifier": "non-relative"
+  "python.defaultInterpreterPath": "${workspaceFolder}\\.vscode\\mise-tools\\python.exe",
+  "editor.fontSize": 15,
+  "editor.fontFamily": "Maple Mono NF CN",
+  "editor.wordWrap": "on",
+  "editor.codeLensFontFamily": "Maple Mono NF CN",
+  "editor.inlayHints.fontFamily": "Maple Mono NF CN",
+  "editor.inlineSuggest.fontFamily": "Maple Mono NF CN",
+  "chat.editor.fontFamily": "Maple Mono NF CN",
+  "chat.fontFamily": "Maple Mono NF CN",
+  "debug.console.fontFamily": "Maple Mono NF CN",
+  "scm.inputFontFamily": "Maple Mono NF CN",
+  "terminal.integrated.fontFamily": "Maple Mono NF CN",
+  "notebook.markup.fontFamily": "Maple Mono NF CN",
+  "notebook.output.fontFamily": "Maple Mono NF CN",
+  "errorLens.fontFamily": "Maple Mono NF CN"
 }

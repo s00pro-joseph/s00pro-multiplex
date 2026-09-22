@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
 import { searchFromApi } from '@/lib/downstream';
+import { fetchDoubanAnchors } from '@/lib/douban-suggest';
+import { selectActiveSources, sortByResourcesDesc } from '@/lib/source-select';
 import { yellowWords } from '@/lib/yellow';
 
 export const runtime = 'nodejs';
@@ -31,7 +33,22 @@ export async function GET(request: NextRequest) {
   }
 
   const config = await getConfig();
-  const apiSites = await getAvailableApiSites(authInfo.username);
+  // 9-actives：与传统搜索一致（健康度已在内部过滤降级源）
+  // 成人频道（/adult 前缀由 proxy 改写：query adult=1 或请求头 x-adult-channel）
+  const adultChannel =
+    searchParams.get('adult') === '1' || request.headers.get('x-adult-channel') === '1';
+  const allApiSites = await getAvailableApiSites(authInfo.username, { adultChannel });
+  // 库越大越先搜（流式首屏更快看到大库结果）
+  const apiSites = sortByResourcesDesc(selectActiveSources(allApiSites));
+
+  // 结果上限：与传统搜索一致，默认 250，all=1 取全部
+  const wantAll = searchParams.get('all') === '1';
+  const RESULT_LIMIT = 250;
+
+  // 豆瓣锚点与 CMS 并发（成人频道不混入，保持纯净）
+  const doubanPromise = adultChannel
+    ? Promise.resolve([] as any[])
+    : fetchDoubanAnchors(query).catch(() => []);
 
   // 共享状态
   let streamClosed = false;
@@ -73,6 +90,39 @@ export async function GET(request: NextRequest) {
       // 记录已完成的源数量
       let completedSources = 0;
       const allResults: any[] = [];
+      let streamedCount = 0;
+      const capSlice = (items: any[]) => {
+        if (wantAll) return items;
+        const room = RESULT_LIMIT - streamedCount;
+        if (room <= 0) return [];
+        return items.slice(0, room);
+      };
+
+      // 豆瓣锚点先行（权重 100 置顶，与传统搜索一致）
+      try {
+        const anchors = await doubanPromise;
+        if (anchors.length > 0 && !streamClosed) {
+          const toSend = capSlice(anchors);
+          completedSources++;
+          if (toSend.length > 0) {
+            streamedCount += toSend.length;
+            allResults.push(...toSend);
+            const anchorEvent = `data: ${JSON.stringify({
+              type: 'source_result',
+              source: 'douban',
+              sourceName: '豆瓣',
+              results: toSend,
+              timestamp: Date.now()
+            })}\n\n`;
+            if (!safeEnqueue(encoder.encode(anchorEvent))) {
+              streamClosed = true;
+              return;
+            }
+          }
+        }
+      } catch {
+        // 锚点失败即无锚点，不阻塞 CMS
+      }
 
       // 为每个源创建搜索 Promise
       const searchPromises = apiSites.map(async (site) => {
@@ -96,15 +146,20 @@ export async function GET(request: NextRequest) {
             });
           }
 
-          // 发送该源的搜索结果
+          // 发送该源的搜索结果（上限裁剪，进度照常推进）
           completedSources++;
+          const toSend = capSlice(filteredResults);
+          if (toSend.length > 0) {
+            streamedCount += toSend.length;
+            allResults.push(...toSend);
+          }
 
           if (!streamClosed) {
             const sourceEvent = `data: ${JSON.stringify({
               type: 'source_result',
               source: site.key,
               sourceName: site.name,
-              results: filteredResults,
+              results: toSend,
               timestamp: Date.now()
             })}\n\n`;
 
@@ -112,10 +167,6 @@ export async function GET(request: NextRequest) {
               streamClosed = true;
               return; // 连接已关闭，停止处理
             }
-          }
-
-          if (filteredResults.length > 0) {
-            allResults.push(...filteredResults);
           }
 
         } catch (error) {
@@ -141,12 +192,14 @@ export async function GET(request: NextRequest) {
         }
 
         // 检查是否所有源都已完成
-        if (completedSources === apiSites.length) {
+        const totalExpected = apiSites.length + 1; // +1 豆瓣锚点
+        if (completedSources === totalExpected) {
           if (!streamClosed) {
-            // 发送最终完成事件
+            // 发送最终完成事件（含上限标记，与传统搜索一致）
             const completeEvent = `data: ${JSON.stringify({
               type: 'complete',
               totalResults: allResults.length,
+              limited: !wantAll && streamedCount >= RESULT_LIMIT,
               completedSources,
               timestamp: Date.now()
             })}\n\n`;

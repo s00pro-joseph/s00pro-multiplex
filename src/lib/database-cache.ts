@@ -1,4 +1,5 @@
 import { db } from './db';
+import { serverLogger } from './logger';
 
 // 格式化字节大小
 function formatBytes(bytes: number): string {
@@ -31,10 +32,10 @@ function getRedisStorage(): any {
       return storage;
     }
 
-    console.warn('当前存储类型不支持缓存统计功能');
+    serverLogger.warn('当前存储类型不支持缓存统计功能');
     return null;
   } catch (error) {
-    console.warn('无法访问存储实例:', error);
+    serverLogger.warn('无法访问存储实例:', error);
     return null;
   }
 }
@@ -44,27 +45,28 @@ export class DatabaseCacheManager {
   // 获取Redis兼容数据库中的缓存统计（支持KVRocks、Upstash、Redis）
   static async getKVRocksCacheStats() {
     const storageType = getStorageType();
-    console.log('🔍 开始获取Redis存储实例...');
-    console.log('🔍 存储类型:', storageType);
+    serverLogger.log('🔍 开始获取Redis存储实例...');
+    serverLogger.log('🔍 存储类型:', storageType);
 
     const storage = getRedisStorage();
     if (!storage) {
-      console.warn('❌ Redis存储不可用，跳过数据库缓存统计');
+      serverLogger.warn('❌ Redis存储不可用，跳过数据库缓存统计');
       return null;
     }
 
-    console.log('✅ Redis存储实例获取成功');
-    console.log('🔍 存储实例类型:', storage.constructor?.name);
-    console.log('🔍 存储方法检查: withRetry =', typeof storage.withRetry);
-    console.log('🔍 存储方法检查: client =', !!storage.client);
-    console.log('🔍 存储方法检查: client.keys =', typeof storage.client?.keys);
+    serverLogger.log('✅ Redis存储实例获取成功');
+    serverLogger.log('🔍 存储实例类型:', storage.constructor?.name);
+    serverLogger.log('🔍 存储方法检查: withRetry =', typeof storage.withRetry);
+    serverLogger.log('🔍 存储方法检查: client =', !!storage.client);
+    serverLogger.log(
+      '🔍 存储方法检查: client.keys =',
+      typeof storage.client?.keys,
+    );
 
     const stats = {
       douban: { count: 0, size: 0, types: {} as Record<string, number> },
       shortdrama: { count: 0, size: 0, types: {} as Record<string, number> },
-      tmdb: { count: 0, size: 0, types: {} as Record<string, number> },
       bangumi: { count: 0, size: 0, types: {} as Record<string, number> },
-      danmu: { count: 0, size: 0 },
       netdisk: { count: 0, size: 0 },
       youtube: { count: 0, size: 0 },
       bilibili: { count: 0, size: 0 },
@@ -72,16 +74,16 @@ export class DatabaseCacheManager {
     };
 
     try {
-      console.log('📊 开始从Redis兼容数据库读取缓存统计...');
+      serverLogger.log('📊 开始从Redis兼容数据库读取缓存统计...');
 
       // 获取所有缓存键 - 支持不同的Redis客户端
       let allCacheKeys: string[] = [];
 
-      console.log(`🔍 当前存储类型: ${storageType}`);
+      serverLogger.log(`🔍 当前存储类型: ${storageType}`);
 
       if (storageType === 'upstash') {
         // Upstash Redis - 尝试不同的调用方式
-        console.log('🔍 使用Upstash Redis方式获取键...');
+        serverLogger.log('🔍 使用Upstash Redis方式获取键...');
 
         try {
           if (typeof storage.withRetry === 'function' && storage.client?.keys) {
@@ -91,39 +93,44 @@ export class DatabaseCacheManager {
             );
           } else if (storage.client?.keys) {
             // 方式2：直接调用 client.keys
-            console.log('🔍 withRetry不可用，直接调用client.keys');
+            serverLogger.log('🔍 withRetry不可用，直接调用client.keys');
             allCacheKeys = await storage.client.keys('cache:*');
           } else {
-            console.warn('❌ Upstash存储没有可用的keys方法');
-            console.log('🔍 可用方法:', Object.getOwnPropertyNames(storage));
+            serverLogger.warn('❌ Upstash存储没有可用的keys方法');
+            serverLogger.log(
+              '🔍 可用方法:',
+              Object.getOwnPropertyNames(storage),
+            );
             return null;
           }
         } catch (error) {
-          console.error('❌ Upstash键获取失败:', error);
+          serverLogger.error('❌ Upstash键获取失败:', error);
           return null;
         }
       } else if (storageType === 'kvrocks' || storageType === 'redis') {
         // KVRocks/标准Redis (带重试机制) - 保持不变
-        console.log('🔍 使用KVRocks/标准Redis方式获取键...');
+        serverLogger.log('🔍 使用KVRocks/标准Redis方式获取键...');
         if (typeof storage.withRetry === 'function' && storage.client?.keys) {
           allCacheKeys = await storage.withRetry(() =>
             storage.client.keys('cache:*'),
           );
         } else {
-          console.warn('❌ KVRocks/Redis存储没有withRetry或client.keys方法');
+          serverLogger.warn(
+            '❌ KVRocks/Redis存储没有withRetry或client.keys方法',
+          );
           return null;
         }
       } else if (storageType === 'sqlite') {
-        console.log('ℹ️ SQLite不支持缓存统计功能');
+        serverLogger.log('ℹ️ SQLite不支持缓存统计功能');
         return null;
       } else {
-        console.warn('❌ 不支持的存储类型或无法找到合适的keys方法');
-        console.log('🔍 存储类型:', storageType);
-        console.log('🔍 可用方法:', Object.getOwnPropertyNames(storage));
+        serverLogger.warn('❌ 不支持的存储类型或无法找到合适的keys方法');
+        serverLogger.log('🔍 存储类型:', storageType);
+        serverLogger.log('🔍 可用方法:', Object.getOwnPropertyNames(storage));
         return null;
       }
 
-      console.log(
+      serverLogger.log(
         `📊 数据库中找到 ${allCacheKeys.length} 个缓存键:`,
         allCacheKeys.slice(0, 5),
       );
@@ -145,10 +152,10 @@ export class DatabaseCacheManager {
             )) as any[];
           } else if (storage.client?.mget) {
             // 方式2：直接调用 client.mget
-            console.log('🔍 withRetry不可用，直接调用client.mget');
+            serverLogger.log('🔍 withRetry不可用，直接调用client.mget');
             values = (await storage.client.mget(allCacheKeys)) as any[];
           } else {
-            console.warn('Upstash没有client.mget方法，使用逐个获取');
+            serverLogger.warn('Upstash没有client.mget方法，使用逐个获取');
             // 回退：逐个获取
             for (const key of allCacheKeys) {
               try {
@@ -165,13 +172,13 @@ export class DatabaseCacheManager {
                 }
                 values.push(value);
               } catch (error) {
-                console.warn(`获取缓存键 ${key} 失败:`, error);
+                serverLogger.warn(`获取缓存键 ${key} 失败:`, error);
                 values.push(null);
               }
             }
           }
         } catch (error) {
-          console.error('❌ Upstash批量获取失败:', error);
+          serverLogger.error('❌ Upstash批量获取失败:', error);
           return null;
         }
       } else if (storageType === 'kvrocks' || storageType === 'redis') {
@@ -181,7 +188,7 @@ export class DatabaseCacheManager {
             storage.client.mGet(allCacheKeys),
           );
         } else {
-          console.warn('KVRocks/Redis没有mGet方法，使用逐个获取');
+          serverLogger.warn('KVRocks/Redis没有mGet方法，使用逐个获取');
           // 回退：逐个获取
           for (const key of allCacheKeys) {
             try {
@@ -194,17 +201,17 @@ export class DatabaseCacheManager {
               }
               values.push(value);
             } catch (error) {
-              console.warn(`获取缓存键 ${key} 失败:`, error);
+              serverLogger.warn(`获取缓存键 ${key} 失败:`, error);
               values.push(null);
             }
           }
         }
       } else if (storageType === 'sqlite') {
-        console.log('ℹ️ SQLite不支持缓存统计功能');
+        serverLogger.log('ℹ️ SQLite不支持缓存统计功能');
         return null;
       } else {
         // 通用回退：逐个获取
-        console.warn('使用通用回退方法逐个获取缓存数据');
+        serverLogger.warn('使用通用回退方法逐个获取缓存数据');
         for (const key of allCacheKeys) {
           try {
             let value: any = null;
@@ -213,7 +220,7 @@ export class DatabaseCacheManager {
             }
             values.push(value);
           } catch (error) {
-            console.warn(`获取缓存键 ${key} 失败:`, error);
+            serverLogger.warn(`获取缓存键 ${key} 失败:`, error);
             values.push(null);
           }
         }
@@ -252,18 +259,6 @@ export class DatabaseCacheManager {
           const type = key.split('-')[1];
           stats.shortdrama.types[type] =
             (stats.shortdrama.types[type] || 0) + 1;
-        } else if (key.startsWith('tmdb-')) {
-          stats.tmdb.count++;
-          stats.tmdb.size += size;
-
-          const type = key.split('-')[1];
-          stats.tmdb.types[type] = (stats.tmdb.types[type] || 0) + 1;
-        } else if (
-          key.startsWith('danmu-cache') ||
-          key === 's00pro-multiplex_danmu_cache'
-        ) {
-          stats.danmu.count++;
-          stats.danmu.size += size;
         } else if (key.startsWith('netdisk-search')) {
           stats.netdisk.count++;
           stats.netdisk.size += size;
@@ -280,19 +275,19 @@ export class DatabaseCacheManager {
         stats.total.size += size;
       });
 
-      console.log(
+      serverLogger.log(
         `✅ Redis缓存统计完成: 总计 ${stats.total.count} 项, ${formatBytes(stats.total.size)}`,
       );
       return stats;
     } catch (error) {
-      console.error('Redis缓存统计失败:', error);
+      serverLogger.error('Redis缓存统计失败:', error);
       return null;
     }
   }
 
   // 获取缓存统计信息（支持KVRocks/Upstash/Redis，localStorage作为备用）
   static async getSimpleCacheStats() {
-    console.log('📊 开始获取缓存统计信息...');
+    serverLogger.log('📊 开始获取缓存统计信息...');
 
     // 从 Redis兼容数据库 获取统计（支持KVRocks、Upstash、Redis）
     const redisStats = await DatabaseCacheManager.getKVRocksCacheStats();
@@ -305,8 +300,6 @@ export class DatabaseCacheManager {
         formattedSizes: {
           douban: formatBytes(redisStats.douban.size),
           shortdrama: formatBytes(redisStats.shortdrama.size),
-          tmdb: formatBytes(redisStats.tmdb.size),
-          danmu: formatBytes(redisStats.danmu.size),
           netdisk: formatBytes(redisStats.netdisk.size),
           youtube: formatBytes(redisStats.youtube.size),
           bilibili: formatBytes(redisStats.bilibili.size),
@@ -319,9 +312,7 @@ export class DatabaseCacheManager {
     const stats = {
       douban: { count: 0, size: 0, types: {} as Record<string, number> },
       shortdrama: { count: 0, size: 0, types: {} as Record<string, number> },
-      tmdb: { count: 0, size: 0, types: {} as Record<string, number> },
       bangumi: { count: 0, size: 0, types: {} as Record<string, number> },
-      danmu: { count: 0, size: 0 },
       netdisk: { count: 0, size: 0 },
       youtube: { count: 0, size: 0 },
       bilibili: { count: 0, size: 0 },
@@ -334,17 +325,14 @@ export class DatabaseCacheManager {
         (key) =>
           key.startsWith('douban-') ||
           key.startsWith('shortdrama-') ||
-          key.startsWith('tmdb-') ||
-          key.startsWith('danmu-cache') ||
           key.startsWith('netdisk-search') ||
           key.startsWith('youtube-search') ||
           key.startsWith('bilibili-search') ||
           key.startsWith('search-') ||
-          key.startsWith('cache-') ||
-          key === 's00pro-multiplexultiplex_danmu_cache',
+          key.startsWith('cache-'),
       );
 
-      console.log(`📊 localStorage中找到 ${keys.length} 个相关缓存键`);
+      serverLogger.log(`📊 localStorage中找到 ${keys.length} 个相关缓存键`);
 
       keys.forEach((key) => {
         const data = localStorage.getItem(key);
@@ -369,18 +357,6 @@ export class DatabaseCacheManager {
           const type = key.split('-')[1];
           stats.shortdrama.types[type] =
             (stats.shortdrama.types[type] || 0) + 1;
-        } else if (key.startsWith('tmdb-')) {
-          stats.tmdb.count++;
-          stats.tmdb.size += size;
-
-          const type = key.split('-')[1];
-          stats.tmdb.types[type] = (stats.tmdb.types[type] || 0) + 1;
-        } else if (
-          key.startsWith('danmu-cache') ||
-          key === 's00pro-multiplexultiplex_danmu_cache'
-        ) {
-          stats.danmu.count++;
-          stats.danmu.size += size;
         } else if (key.startsWith('netdisk-search')) {
           stats.netdisk.count++;
           stats.netdisk.size += size;
@@ -406,9 +382,7 @@ export class DatabaseCacheManager {
       formattedSizes: {
         douban: formatBytes(stats.douban.size),
         shortdrama: formatBytes(stats.shortdrama.size),
-        tmdb: formatBytes(stats.tmdb.size),
         bangumi: formatBytes(stats.bangumi.size),
-        danmu: formatBytes(stats.danmu.size),
         netdisk: formatBytes(stats.netdisk.size),
         youtube: formatBytes(stats.youtube.size),
         bilibili: formatBytes(stats.bilibili.size),
@@ -422,9 +396,7 @@ export class DatabaseCacheManager {
     type:
       | 'douban'
       | 'shortdrama'
-      | 'tmdb'
       | 'bangumi'
-      | 'danmu'
       | 'netdisk'
       | 'youtube'
       | 'bilibili',
@@ -435,11 +407,11 @@ export class DatabaseCacheManager {
       switch (type) {
         case 'douban':
           await db.clearExpiredCache('douban-');
-          console.log('🗑️ 豆瓣缓存清理完成');
+          serverLogger.log('🗑️ 豆瓣缓存清理完成');
           break;
         case 'bangumi':
           await db.clearExpiredCache('bangumi-');
-          console.log('🗑️ Bangumi缓存清理完成');
+          serverLogger.log('🗑️ Bangumi缓存清理完成');
           break;
         case 'shortdrama':
           await db.clearExpiredCache('shortdrama-');
@@ -452,28 +424,11 @@ export class DatabaseCacheManager {
               localStorage.removeItem(key);
               clearedCount++;
             });
-            console.log(`🗑️ localStorage中清理了 ${keys.length} 个短剧缓存项`);
-          }
-          console.log('🗑️ 短剧缓存清理完成');
-          break;
-        case 'tmdb':
-          await db.clearExpiredCache('tmdb-');
-          // 清理localStorage中的TMDB缓存（兜底）
-          if (typeof localStorage !== 'undefined') {
-            const keys = Object.keys(localStorage).filter((key) =>
-              key.startsWith('tmdb-'),
+            serverLogger.log(
+              `🗑️ localStorage中清理了 ${keys.length} 个短剧缓存项`,
             );
-            keys.forEach((key) => {
-              localStorage.removeItem(key);
-              clearedCount++;
-            });
-            console.log(`🗑️ localStorage中清理了 ${keys.length} 个TMDB缓存项`);
           }
-          console.log('🗑️ TMDB缓存清理完成');
-          break;
-        case 'danmu':
-          await db.clearExpiredCache('danmu-cache');
-          console.log('🗑️ 弹幕缓存清理完成');
+          serverLogger.log('🗑️ 短剧缓存清理完成');
           break;
         case 'netdisk':
           await db.clearExpiredCache('netdisk-search');
@@ -486,11 +441,11 @@ export class DatabaseCacheManager {
               localStorage.removeItem(key);
               clearedCount++;
             });
-            console.log(
+            serverLogger.log(
               `🗑️ localStorage中清理了 ${keys.length} 个网盘搜索缓存项`,
             );
           }
-          console.log('🗑️ 网盘搜索缓存清理完成');
+          serverLogger.log('🗑️ 网盘搜索缓存清理完成');
           break;
         case 'youtube':
           await db.clearExpiredCache('youtube-search');
@@ -503,11 +458,11 @@ export class DatabaseCacheManager {
               localStorage.removeItem(key);
               clearedCount++;
             });
-            console.log(
+            serverLogger.log(
               `🗑️ localStorage中清理了 ${keys.length} 个YouTube搜索缓存项`,
             );
           }
-          console.log('🗑️ YouTube搜索缓存清理完成');
+          serverLogger.log('🗑️ YouTube搜索缓存清理完成');
           break;
         case 'bilibili':
           await db.clearExpiredCache('bilibili-search');
@@ -520,18 +475,18 @@ export class DatabaseCacheManager {
               localStorage.removeItem(key);
               clearedCount++;
             });
-            console.log(
+            serverLogger.log(
               `🗑️ localStorage中清理了 ${keys.length} 个Bilibili搜索缓存项`,
             );
           }
-          console.log('🗑️ Bilibili搜索缓存清理完成');
+          serverLogger.log('🗑️ Bilibili搜索缓存清理完成');
           break;
       }
 
       // 由于clearExpiredCache不返回数量，我们无法精确统计
       clearedCount = 1; // 标记操作已执行
     } catch (error) {
-      console.error(`清理${type}缓存失败:`, error);
+      serverLogger.error(`清理${type}缓存失败:`, error);
     }
 
     return clearedCount;
@@ -541,10 +496,10 @@ export class DatabaseCacheManager {
   static async clearExpiredCache(): Promise<number> {
     try {
       await db.clearExpiredCache();
-      console.log('🗑️ 所有过期缓存清理完成');
+      serverLogger.log('🗑️ 所有过期缓存清理完成');
       return 1; // 标记操作已执行
     } catch (error) {
-      console.error('清理过期缓存失败:', error);
+      serverLogger.error('清理过期缓存失败:', error);
       return 0;
     }
   }

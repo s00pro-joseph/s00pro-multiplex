@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import type { Metadata, Viewport } from 'next';
 import nextDynamic from 'next/dynamic';
 import { Inter } from 'next/font/google';
@@ -20,7 +18,6 @@ import NavigationShell from '../components/NavigationShell';
 import QueryProvider from '../components/QueryProvider';
 import { SiteProvider } from '../components/SiteProvider';
 import { ThemeProvider } from '../components/ThemeProvider';
-import { WatchRoomProvider } from '../components/WatchRoomProvider';
 import { DownloadProvider } from '../contexts/DownloadContext';
 import { GlobalCacheProvider } from '../contexts/GlobalCacheContext';
 
@@ -37,9 +34,6 @@ const SessionTracker = nextDynamic(() =>
 const RouteWarmup = nextDynamic(() => import('../components/RouteWarmup'));
 const DownloadPanel = nextDynamic(() =>
   import('../components/download/DownloadPanel').then((m) => m.DownloadPanel),
-);
-const ChatFloatingWindow = nextDynamic(
-  () => import('../components/watch-room/ChatFloatingWindow'),
 );
 
 const inter = Inter({ subsets: ['latin'] });
@@ -94,7 +88,6 @@ export default async function RootLayout({
   let enableWebLive = false;
   let customAdFilterVersion = 0;
   let aiRecommendEnabled = false;
-  let embyEnabled = false;
   let videoProxyEnabled = false;
   let videoProxyUrl = '';
   let customCategories = [] as {
@@ -123,12 +116,6 @@ export default async function RootLayout({
     enableWebLive = config.SiteConfig.EnableWebLive ?? false;
     customAdFilterVersion = config.SiteConfig?.CustomAdFilterVersion || 0;
     aiRecommendEnabled = config.AIRecommendConfig?.enabled ?? false;
-    // 检查是否启用了 Emby 功能（支持多源）
-    embyEnabled = !!(
-      config.EmbyConfig?.Sources &&
-      config.EmbyConfig.Sources.length > 0 &&
-      config.EmbyConfig.Sources.some((s) => s.enabled && s.ServerURL)
-    );
     videoProxyEnabled = config.VideoProxyConfig?.enabled ?? false;
     videoProxyUrl = config.VideoProxyConfig?.proxyUrl || '';
   }
@@ -149,8 +136,6 @@ export default async function RootLayout({
     ENABLE_WEB_LIVE: enableWebLive,
     CUSTOM_AD_FILTER_VERSION: customAdFilterVersion,
     AI_RECOMMEND_ENABLED: aiRecommendEnabled,
-    EMBY_ENABLED: embyEnabled,
-    PRIVATE_LIBRARY_ENABLED: embyEnabled,
     VIDEO_PROXY_ENABLED: videoProxyEnabled,
     VIDEO_PROXY_URL: videoProxyUrl,
     // 禁用预告片：Vercel 自动检测，或用户手动设置 DISABLE_HERO_TRAILER=true
@@ -175,7 +160,6 @@ export default async function RootLayout({
         />
         <link rel='apple-touch-icon' href='/icons/icon-192x192.png' />
         {/* 将配置序列化后直接写入脚本，浏览器端可通过 window.RUNTIME_CONFIG 获取 */}
-        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script
           dangerouslySetInnerHTML={{
             // 转义 < 与分隔符，避免站点名/公告等配置内容中的 </script> 提前闭合脚本标签
@@ -208,38 +192,35 @@ export default async function RootLayout({
           <QueryProvider>
             <GlobalCacheProvider>
               <DownloadProvider>
-                <WatchRoomProvider>
-                  <SiteProvider siteName={siteName} announcement={announcement}>
-                    <GlobalDOMErrorHandler />
-                    <ChunkErrorGuard />
-                    <TranslationWarningToast />
-                    <SessionTracker />
-                    <RouteWarmup />
-                    {/* 导航栏在 layout 层，自动持久化 */}
-                    <NavigationShell />
-                    {/* 主内容区域 - 只有这部分会在路由切换时重新渲染 */}
-                    <main className='w-full min-h-screen pt-[calc(44px+env(safe-area-inset-top))] md:pt-6 pb-8 md:pl-[var(--sidenav-w,232px)] md:transition-[padding-left] md:duration-300'>
-                      <div className='w-full max-w-[2560px] mx-auto px-4 md:px-6 lg:px-8'>
-                        <DOMErrorBoundary componentName='PageContent'>
-                          <Suspense
-                            fallback={
-                              <div className='fixed inset-0 z-50'>
-                                <CinematicLoadingFallback />
-                              </div>
-                            }
-                          >
-                            {children}
-                          </Suspense>
-                        </DOMErrorBoundary>
-                      </div>
-                    </main>
-                    <GlobalErrorIndicator />
-                  </SiteProvider>
-                  <Suspense fallback={null}>
-                    <DownloadPanel />
-                    <ChatFloatingWindow />
-                  </Suspense>
-                </WatchRoomProvider>
+                <SiteProvider siteName={siteName} announcement={announcement}>
+                  <GlobalDOMErrorHandler />
+                  <ChunkErrorGuard />
+                  <TranslationWarningToast />
+                  <SessionTracker />
+                  <RouteWarmup />
+                  {/* 导航栏在 layout 层，自动持久化 */}
+                  <NavigationShell />
+                  {/* 主内容区域 - 只有这部分会在路由切换时重新渲染 */}
+                  <main className='w-full min-h-screen pt-[calc(44px+env(safe-area-inset-top))] md:pt-6 pb-8 md:pl-(--sidenav-w,232px) md:transition-[padding-left] md:duration-300'>
+                    <div className='w-full max-w-[2560px] mx-auto px-4 md:px-6 lg:px-8'>
+                      <DOMErrorBoundary componentName='PageContent'>
+                        <Suspense
+                          fallback={
+                            <div className='fixed inset-0 z-50'>
+                              <CinematicLoadingFallback />
+                            </div>
+                          }
+                        >
+                          {children}
+                        </Suspense>
+                      </DOMErrorBoundary>
+                    </div>
+                  </main>
+                  <GlobalErrorIndicator />
+                </SiteProvider>
+                <Suspense fallback={null}>
+                  <DownloadPanel />
+                </Suspense>
               </DownloadProvider>
             </GlobalCacheProvider>
           </QueryProvider>

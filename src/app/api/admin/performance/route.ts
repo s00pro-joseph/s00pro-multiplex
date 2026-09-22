@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getRecentMetrics, getRecentRequests, getCurrentStatus, clearCache, startAutoCollection } from '@/lib/performance-monitor';
-import { initFetchInterceptor } from '@/lib/fetch-interceptor';
+import { initServerFetchInterceptor } from '@/lib/fetch-interceptor';
 import { getExternalTrafficStats } from '@/lib/external-traffic-monitor';
 import { getConfig } from '@/lib/config';
 
@@ -16,8 +16,8 @@ export const runtime = 'nodejs';
 // 启动自动数据收集
 startAutoCollection();
 
-// 启动全局 fetch 拦截器（监控外部流量）
-initFetchInterceptor();
+// 启动服务端全局 fetch 拦截器（监控外部流量）
+initServerFetchInterceptor();
 
 /**
  * GET - 获取性能数据

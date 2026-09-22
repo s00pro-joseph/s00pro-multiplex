@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
           url: s.url,
           ua: s.ua,
           epg: s.epg,
-          isTvBox: s.isTvBox,
         })),
       };
 
@@ -115,7 +114,6 @@ export async function POST(request: NextRequest) {
         url: source.url,
         ua: source.ua || '',
         epg: source.epg || '',
-        isTvBox: source.isTvBox || false,
         from: 'custom' as const,
         channelNumber: 0,
         disabled: false,
@@ -179,7 +177,6 @@ function parseM3UForImport(content: string): any[] {
           url,
           ua: '',
           epg: '',
-          isTvBox: false,
         });
         i++;
       }

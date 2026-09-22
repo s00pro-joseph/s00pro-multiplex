@@ -9,9 +9,9 @@ import { recordExternalTraffic } from './external-traffic-monitor';
 const originalFetch = global.fetch;
 
 /**
- * 初始化全局 fetch 拦截器
+ * 初始化服务端全局 fetch 拦截器（仅服务端生效）
  */
-export function initFetchInterceptor() {
+export function initServerFetchInterceptor() {
   // 只在服务端拦截
   if (typeof window !== 'undefined') {
     return;

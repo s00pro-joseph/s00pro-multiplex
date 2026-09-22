@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { clearConfigCache, getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { getServerSecret } from '@/lib/auth';
 import { useInviteCode, validateInviteCode } from '@/lib/invite-code';
 
 export const runtime = 'nodejs';
@@ -58,10 +59,10 @@ async function generateAuthCookie(
     authData.password = password;
   }
 
-  if (username && process.env.PASSWORD) {
+  if (username && getServerSecret()) {
     authData.username = username;
-    // 使用密码作为密钥对用户名进行签名
-    const signature = await generateSignature(username, process.env.PASSWORD);
+    // 使用服务端密钥对用户名进行签名
+    const signature = await generateSignature(username, getServerSecret());
     authData.signature = signature;
     authData.timestamp = Date.now(); // 添加时间戳防重放攻击
   }

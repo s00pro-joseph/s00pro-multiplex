@@ -51,16 +51,4 @@ export interface M3U8DownloadTask extends M3U8TaskBase {
   };
 }
 
-/**
- * @deprecated 新版本不再使用类的方式，请使用函数式 API
- *
- * 迁移指南：
- * - createTask() → parseM3U8()
- * - startTask() → downloadM3U8Video()
- * - pauseTask() → pauseController.pause()
- * - resumeTask() → pauseController.resume()
- */
-export class M3U8Downloader {
-  // 空的兼容类，防止编译错误
-  // 实际使用时应该迁移到新的函数式 API
-}
+

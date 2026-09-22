@@ -19,9 +19,7 @@ import {
 interface CacheStats {
   douban: { count: number; size: number; types: Record<string, number> };
   shortdrama: { count: number; size: number; types: Record<string, number> };
-  tmdb: { count: number; size: number; types: Record<string, number> };
   bangumi: { count: number; size: number; types: Record<string, number> };
-  danmu: { count: number; size: number };
   netdisk: { count: number; size: number };
   youtube: { count: number; size: number };
   bilibili: { count: number; size: number };
@@ -33,8 +31,6 @@ interface CacheStats {
     douban: string;
     bangumi: string;
     shortdrama: string;
-    tmdb: string;
-    danmu: string;
     netdisk: string;
     youtube: string;
     bilibili: string;
@@ -73,20 +69,6 @@ const CACHE_TYPES: CacheType[] = [
     description: '短剧分类、推荐、列表、集数等数据缓存',
     icon: PlayIcon,
     color: 'text-orange-600 bg-orange-100'
-  },
-  {
-    key: 'tmdb',
-    name: 'TMDB数据',
-    description: 'TMDB演员搜索、作品信息等数据缓存',
-    icon: FilmIcon,
-    color: 'text-purple-600 bg-purple-100'
-  },
-  {
-    key: 'danmu',
-    name: '弹幕数据',
-    description: '外部弹幕API获取的弹幕内容缓存',
-    icon: DocumentTextIcon,
-    color: 'text-blue-600 bg-blue-100'
   },
   {
     key: 'netdisk',

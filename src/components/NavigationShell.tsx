@@ -14,11 +14,10 @@ import { UserMenu } from './UserMenu';
 // 不需要导航栏的独立路由
 const STANDALONE_ROUTES = [
   '/login',
+  '/setup',
   '/register',
   '/oidc-register',
   '/warning',
-  '/source-test',
-  '/watch-room/screen',
 ];
 
 function isStandaloneRoute(pathname: string) {

@@ -32,6 +32,7 @@ yarn-error.log*
 # local env files
 .env
 .env*.local
+.tmp
 
 # vercel
 .vercel
@@ -66,3 +67,5 @@ crash-reports.jsonl
 
 # sqlite data
 data/
+# local backups
+*.bak

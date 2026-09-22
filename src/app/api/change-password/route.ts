@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
+import { getAuthInfoFromCookie, verifyAuthCookieWithVersion } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -24,10 +24,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { oldPassword, newPassword } = body;
 
-    // 获取认证信息
+    // 获取认证信息（验签 + 密码版本，旧会话直接拒收）
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!(await verifyAuthCookieWithVersion(authInfo, db))) {
+      return NextResponse.json({ error: '会话已失效，请重新登录' }, { status: 401 });
     }
 
     // 验证旧密码
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '旧密码错误' }, { status: 401 });
     }
 
-    // 修改密码
+    // 修改密码（内部自动 bump 密码版本，其他设备会话即刻失效）
     await db.changePassword(username, newPassword);
 
     return NextResponse.json({ ok: true });

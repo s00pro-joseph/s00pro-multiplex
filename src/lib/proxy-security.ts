@@ -135,7 +135,11 @@ function isBlockedAddress(address: string): boolean {
 export async function validateProxyTargetUrl(rawUrl: string): Promise<string> {
   // 如果禁用了 SSRF 防护，仅做基本 URL 格式验证
   // ⚠️ 警告：禁用 SSRF 防护会允许访问内网资源，仅适用于私有部署环境
+  // ⚠️ 生产环境强制启用 SSRF 防护，拒绝绕过
   if (process.env.DISABLE_SSRF_PROTECTION === 'true') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SSRF protection cannot be disabled in production');
+    }
     let parsed: URL;
     try {
       parsed = new URL(rawUrl);
@@ -178,7 +182,10 @@ export async function validateProxyTargetUrl(rawUrl: string): Promise<string> {
   }
 
   // 使用带重试机制的 DNS 查询（cacheable-lookup + 指数退避）
-  const records = await lookupWithRetry(hostname, { all: true, verbatim: true });
+  const records = await lookupWithRetry(hostname, {
+    all: true,
+    verbatim: true,
+  });
   if (!records.length) throw new Error('Host did not resolve');
 
   if (records.some((record) => isBlockedAddress(record.address))) {

@@ -15,7 +15,7 @@ import {
   getDoubanList,
   getDoubanRecommends,
 } from '@/lib/douban.client';
-import { DoubanItem, DoubanResult } from '@/lib/types';
+import { DoubanItem, DoubanResult, SearchResult } from '@/lib/types';
 
 import DoubanCardSkeleton from '@/components/DoubanCardSkeleton';
 import DoubanCustomSelector from '@/components/DoubanCustomSelector';
@@ -46,7 +46,7 @@ const doubanListOptions = (
           tag: selectedCategory.query,
           type: selectedCategory.type,
           pageLimit: PAGE_SIZE,
-          pageStart: pageParam * PAGE_SIZE,
+          pageStart: pageParam,
         });
       }
       return { code: 200, message: 'success', list: [] };
@@ -85,7 +85,7 @@ const doubanListOptions = (
       return await getDoubanRecommends({
         kind: primarySelection === '番剧' ? 'tv' : 'movie',
         pageLimit: PAGE_SIZE,
-        pageStart: pageParam * PAGE_SIZE,
+        pageStart: pageParam,
         category: '动画',
         format: primarySelection === '番剧' ? '电视剧' : '',
         region: multiLevelValues.region || '',
@@ -98,7 +98,7 @@ const doubanListOptions = (
       return await getDoubanRecommends({
         kind: type === 'show' ? 'tv' : (type as 'tv' | 'movie'),
         pageLimit: PAGE_SIZE,
-        pageStart: pageParam * PAGE_SIZE,
+        pageStart: pageParam,
         category: multiLevelValues.type || '',
         format: type === 'show' ? '综艺' : type === 'tv' ? '电视剧' : '',
         region: multiLevelValues.region || '',
@@ -115,7 +115,7 @@ const doubanListOptions = (
         category,
         type: secondarySelection,
         pageLimit: PAGE_SIZE,
-        pageStart: pageParam * PAGE_SIZE,
+        pageStart: pageParam,
       });
     }
   },
@@ -124,7 +124,8 @@ const doubanListOptions = (
     if (!lastPage?.list || lastPage.list.length < PAGE_SIZE) {
       return undefined;
     }
-    return allPages.length;
+    // 聚合接口返回实际消费的原始偏移；其他接口按页序号推算
+    return (lastPage as DoubanResult).nextStart ?? allPages.length * PAGE_SIZE;
   },
   enabled: !!type,
   staleTime: 2 * 60 * 1000,
@@ -188,11 +189,75 @@ function DoubanPageClient() {
     doubanListOptions(type, primarySelection, secondarySelection, multiLevelValues, selectedWeekday, customCategories)
   );
 
-  // 扁平化所有页面数据，过滤掉 null/undefined 项
-  const allItems = useMemo(
-    () => data?.pages.flatMap((page) => page.list).filter((item): item is DoubanItem => !!item?.id) ?? [],
-    [data]
-  );
+  // 扁平化所有页面数据，过滤掉 null/undefined 项，并按 id 去重（聚合翻页可能重叠）
+  const allItems = useMemo(() => {
+    const seen = new Set<string>();
+    return (
+      data?.pages
+        .flatMap((page) => page.list)
+        .filter((item): item is DoubanItem => {
+          if (!item?.id || seen.has(item.id)) {
+            return false;
+          }
+          seen.add(item.id);
+          return true;
+        }) ?? []
+    );
+  }, [data]);
+
+  // 片库更多：豆瓣货架 + 9 CMS（ac-list 最新）合并破 100
+  const [cmsItems, setCmsItems] = useState<SearchResult[]>([]);
+  const [cmsPage, setCmsPage] = useState(1);
+  const [cmsLoading, setCmsLoading] = useState(false);
+  const [cmsDone, setCmsDone] = useState(false);
+  const cmsLoadingRef = useRef(false);
+  const showCmsWall =
+    type === 'movie' || type === 'tv' || type === 'show';
+
+  const fetchCmsWall = useCallback(async (pg: number, reset: boolean, doubanTitles: Set<string>) => {
+    if (cmsLoadingRef.current) return;
+    cmsLoadingRef.current = true;
+    setCmsLoading(true);
+    console.log('[Wall] fetching cms pg=', pg);
+    try {
+      const res = await fetch(`/api/wall/cms?pg=${pg}`);
+      console.log('[Wall] cms status=', res.status);
+      const data = await res.json();
+      const list: SearchResult[] = Array.isArray(data.results) ? data.results : [];
+      // 去重豆瓣墙已有（标题+年份键）
+      const fresh = list.filter((s) => {
+        const k = `${(s.title || '').replaceAll(' ', '')}-${s.year || 'unknown'}`;
+        return !doubanTitles.has(k);
+      });
+      setCmsItems((prev) => (reset ? fresh : [...prev, ...fresh]));
+      setCmsPage(pg);
+      if (list.length === 0) setCmsDone(true);
+    } catch {
+      // 片库失败不影响豆瓣墙
+    } finally {
+      cmsLoadingRef.current = false;
+      setCmsLoading(false);
+    }
+  }, []);
+
+  const allItemsRef = useRef<DoubanItem[]>([]);
+  allItemsRef.current = allItems;
+
+  // 筛选变化时重置片库并拉第一页（片库无筛选，与豆瓣 tab 无关）
+  useEffect(() => {
+    setCmsItems([]);
+    setCmsPage(1);
+    setCmsDone(false);
+    if (type === 'movie' || type === 'tv' || type === 'show') {
+      const doubanTitles = new Set(
+        (allItemsRef.current || []).map(
+          (d: DoubanItem) => `${(d.title || '').replaceAll(' ', '')}-${d.year || 'unknown'}`,
+        ),
+      );
+      fetchCmsWall(1, true, doubanTitles);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, primarySelection, secondarySelection, JSON.stringify(multiLevelValues)]);
 
   // 处理滚动到底部加载更多
   const handleEndReached = useCallback(() => {
@@ -754,6 +819,64 @@ function DoubanPageClient() {
                 </div>
               )}
             </>
+          )}
+          {/* 片库更多：豆瓣 + 9 CMS 合并，破 100 */}
+          {showCmsWall && (cmsItems.length > 0 || cmsLoading) && (
+            <div className='mt-12'>
+              <div className='mb-4 flex items-baseline gap-2 px-2'>
+                <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+                  片库更多
+                </h2>
+                <span className='text-sm font-normal text-gray-500 dark:text-gray-400'>
+                  豆瓣 {allItems.length} + 片库 {cmsItems.length} = {allItems.length + cmsItems.length}
+                </span>
+                {cmsLoading && (
+                  <span className='inline-block h-3 w-3 border-2 border-gray-300 border-t-green-500 rounded-full animate-spin'></span>
+                )}
+              </div>
+              <div className='justify-start grid grid-cols-3 gap-x-2 gap-y-12 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] sm:gap-x-8 sm:gap-y-20'>
+                {cmsItems.map((item) => (
+                  <div key={`cms-${item.source}-${item.id}`} className='w-full'>
+                    <VideoCard
+                      id={item.id}
+                      title={item.title}
+                      poster={item.poster}
+                      episodes={item.episodes.length}
+                      source={item.source}
+                      source_name={item.source_name}
+                      douban_id={item.douban_id}
+                      query=''
+                      year={item.year}
+                      from='search'
+                      type={item.episodes.length === 1 ? 'movie' : 'tv'}
+                      remarks={item.remarks}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className='flex justify-center mt-8 py-4'>
+                {!cmsDone ? (
+                  <button
+                    onClick={() => {
+                      const doubanTitles = new Set(
+                        allItems.map(
+                          (d) => `${(d.title || '').replaceAll(' ', '')}-${d.year || 'unknown'}`,
+                        ),
+                      );
+                      fetchCmsWall(cmsPage + 1, false, doubanTitles);
+                    }}
+                    disabled={cmsLoading}
+                    className='px-6 py-2.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg shadow disabled:opacity-50'
+                  >
+                    {cmsLoading ? '加载中...' : '加载更多片库'}
+                  </button>
+                ) : (
+                  <span className='text-sm text-gray-500 dark:text-gray-400 py-2'>
+                    片库到底 — 共 {allItems.length + cmsItems.length} 项
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>

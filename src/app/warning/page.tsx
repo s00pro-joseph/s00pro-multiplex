@@ -14,12 +14,16 @@ export default async function WarningPage({
   const isWeakPassword = reason === 'weak-password';
 
   return (
-    <div translate="no" className='min-h-screen bg-linear-to-br from-red-50 to-orange-50 flex items-center justify-center p-4'>
+    <div
+      translate='no'
+      className='min-h-screen bg-linear-to-br from-red-50 to-orange-50 flex items-center justify-center p-4'
+    >
       <div className='max-w-2xl w-full bg-white rounded-2xl shadow-2xl p-4 sm:p-8 border border-red-200'>
         {/* 警告图标 */}
         <div className='flex justify-center mb-4 sm:mb-6'>
           <div className='w-16 h-16 sm:w-20 sm:h-20 bg-red-100 rounded-full flex items-center justify-center'>
             <svg
+              suppressHydrationWarning={true}
               className='w-10 h-10 sm:w-12 sm:h-12 text-red-600'
               fill='none'
               stroke='currentColor'
@@ -91,7 +95,9 @@ export default async function WarningPage({
                   <code className='bg-yellow-100 px-1.5 py-0.5 rounded text-xs sm:text-sm font-mono'>
                     PASSWORD
                   </code>{' '}
-                  环境变量，但其值命中常见弱密码/默认密码黑名单（如 admin、admin123、password、123456 等）。请立即修改为一个不在此列表中的强密码。
+                  环境变量，但其值命中常见弱密码/默认密码黑名单（如
+                  admin、admin123、password、123456
+                  等）。请立即修改为一个不在此列表中的强密码。
                 </>
               ) : (
                 <>

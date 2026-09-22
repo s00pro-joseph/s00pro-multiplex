@@ -6,12 +6,24 @@ import { db } from '@/lib/db';
 
 import { AdminConfig } from './admin.types';
 import { DEFAULT_USER_AGENT } from './user-agent';
+import { buildProxiedApiUrl, stripProxiedUrl } from './video-proxy-url';
 
 export interface ApiSite {
   key: string;
   api: string;
   name: string;
   detail?: string;
+  weight?: number; // 优先级权重 0-100，默认 50（搜索排序用）
+  tier?: 'stable' | 'deep' | 'fast'; // 源分档（9-actives 选择用）
+  from?: 'config' | 'custom';
+  disabled?: boolean;
+  is_adult?: boolean;
+  type?: 'vod' | 'shortdrama';
+  health?: 'valid' | 'no_results' | 'invalid';
+  healthCheckedAt?: number;
+  healthReason?: string;
+  probeMs?: number;
+  probeResources?: number; // 全库总量（搜索排序：越大越优先）
 }
 
 export interface LiveCfg {
@@ -19,7 +31,6 @@ export interface LiveCfg {
   url: string;
   ua?: string;
   epg?: string; // 节目单
-  isTvBox?: boolean;
 }
 
 interface ConfigFileStruct {
@@ -84,12 +95,54 @@ export function refineConfig(adminConfig: AdminConfig): AdminConfig {
   // 获取配置文件中的所有源 key
   const apiKeysInFile = new Set(apiSitesFromFile.map(([key]) => key));
 
-  // 删除不在配置文件中的 from='config' 的源
-  currentApiSites.forEach((source, key) => {
-    if (source.from === 'config' && !apiKeysInFile.has(key)) {
-      currentApiSites.delete(key);
+  // 删除不在配置文件中的 from='config' 的源（环境变量成人源豁免：不在订阅文件里）
+  // 注意：订阅文件为空（未配置订阅）时跳过删除，否则会误删全部 config 源
+  if (apiKeysInFile.size > 0) {
+    currentApiSites.forEach((source, key) => {
+      if (source.from === 'config' && !source.is_adult && !apiKeysInFile.has(key)) {
+        currentApiSites.delete(key);
+      }
+    });
+  }
+
+  // 环境变量成人源：存在即保留（删改只认 .env）
+  try {
+    const rawAdult = process.env.ADULT_SOURCES || '';
+    if (rawAdult.trim()) {
+      const adultList = JSON.parse(rawAdult) as Array<{
+        key: string;
+        name: string;
+        api: string;
+        detail?: string;
+      }>;
+      if (Array.isArray(adultList)) {
+        for (const s of adultList) {
+          if (!s || typeof s.key !== 'string' || typeof s.api !== 'string') continue;
+          const existing = currentApiSites.get(s.key);
+          if (existing) {
+            existing.name = typeof s.name === 'string' ? s.name : existing.name;
+            existing.api = s.api;
+            if (typeof s.detail === 'string') existing.detail = s.detail;
+            existing.is_adult = true;
+            existing.from = 'config';
+            existing.disabled = false;
+          } else {
+            currentApiSites.set(s.key, {
+              key: s.key,
+              name: typeof s.name === 'string' ? s.name : s.key,
+              api: s.api,
+              detail: typeof s.detail === 'string' ? s.detail : undefined,
+              from: 'config',
+              disabled: false,
+              is_adult: true,
+            });
+          }
+        }
+      }
     }
-  });
+  } catch (e) {
+    console.warn('[Config] ADULT_SOURCES 解析失败，已跳过:', e);
+  }
 
   // 添加或更新订阅中的所有源
   apiSitesFromFile.forEach(([key, site]) => {
@@ -254,10 +307,6 @@ async function getInitConfig(
       ShowAdultContent: false, // 默认不显示成人内容，可在管理面板修改
       FluidSearch: process.env.NEXT_PUBLIC_FLUID_SEARCH !== 'false',
       EnableWebLive: false,
-      // TMDB配置默认值
-      TMDBApiKey: process.env.TMDB_API_KEY || '',
-      TMDBLanguage: 'zh-CN',
-      EnableTMDBActorSearch: false, // 默认关闭，需要配置API Key后手动开启
     },
     UserConfig: {
       AllowRegister: true, // 默认允许注册
@@ -266,12 +315,6 @@ async function getInitConfig(
     SourceConfig: [],
     CustomCategories: [],
     LiveConfig: [],
-    TVBoxProxyConfig: {
-      enabled: false,
-      proxyUrl:
-        process.env.NEXT_PUBLIC_CORSAPI_URL ||
-        'https://corsapi.smone.workers.dev',
-    },
     VideoProxyConfig: {
       enabled: false,
       proxyUrl:
@@ -313,6 +356,37 @@ async function getInitConfig(
     });
   });
 
+  // 从环境变量补充成人源（独立列表，免管理界面维护）
+  // 格式：ADULT_SOURCES='[{"key":"ad1","name":"示例","api":"https://...","detail":"..."}]'
+  try {
+    const rawAdult = process.env.ADULT_SOURCES || '';
+    if (rawAdult.trim()) {
+      const adultList = JSON.parse(rawAdult) as Array<{
+        key: string;
+        name: string;
+        api: string;
+        detail?: string;
+      }>;
+      if (Array.isArray(adultList)) {
+        for (const s of adultList) {
+          if (!s || typeof s.key !== 'string' || typeof s.api !== 'string') continue;
+          if (adminConfig.SourceConfig.some((e) => e.key === s.key)) continue;
+          adminConfig.SourceConfig.push({
+            key: s.key,
+            name: typeof s.name === 'string' ? s.name : s.key,
+            api: s.api,
+            detail: typeof s.detail === 'string' ? s.detail : undefined,
+            from: 'config',
+            disabled: false,
+            is_adult: true,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Config] ADULT_SOURCES 解析失败，已跳过:', e);
+  }
+
   // 从配置文件中补充自定义分类信息
   cfgFile.custom_category?.forEach((category) => {
     adminConfig.CustomCategories.push({
@@ -335,7 +409,6 @@ async function getInitConfig(
       url: live.url,
       ua: live.ua,
       epg: live.epg,
-      isTvBox: live.isTvBox,
       channelNumber: 0,
       from: 'config',
       disabled: false,
@@ -600,6 +673,17 @@ export async function configSelfCheck(
     };
   }
 
+  // 确保视频源代理配置有默认值（老配置缺少该字段时自动补上，
+  // 否则管理页的 Cloudflare Worker 开关永远显示未配置，播放也不走代理）
+  if (!adminConfig.VideoProxyConfig) {
+    adminConfig.VideoProxyConfig = {
+      enabled: true, // 默认启用：多数视频源 API 不开 CORS，本地播放需要走 Worker
+      proxyUrl:
+        process.env.NEXT_PUBLIC_CORSAPI_URL ||
+        'https://corsapi.smone.workers.dev',
+    };
+  }
+
   // 🔥 OIDC 配置迁移：从单 Provider 迁移到多 Provider
   if (adminConfig.OIDCAuthConfig && !adminConfig.OIDCProviders) {
     // 自动识别 Provider ID
@@ -756,49 +840,18 @@ function applyVideoProxy(sites: ApiSite[], config: AdminConfig): ApiSite[] {
 
   return sites.map((source) => {
     // Extract real API URL (remove old proxy if exists)
-    let realApiUrl = source.api;
-    const urlMatch = source.api.match(/[?&]url=([^&]+)/);
-    if (urlMatch) {
-      realApiUrl = decodeURIComponent(urlMatch[1]);
+    const realApiUrl = stripProxiedUrl(source.api);
+    if (realApiUrl !== source.api) {
       console.log(
         `[Video Proxy] ${source.name}: Detected old proxy, replacing with new proxy`,
       );
     }
 
-    // Extract source ID from real API URL
-    const extractSourceId = (apiUrl: string): string => {
-      try {
-        const url = new URL(apiUrl);
-        const hostname = url.hostname;
-        const parts = hostname.split('.');
-
-        // For caiji.xxx.com or api.xxx.com format, take second-to-last part
-        if (
-          parts.length >= 3 &&
-          (parts[0] === 'caiji' ||
-            parts[0] === 'api' ||
-            parts[0] === 'cj' ||
-            parts[0] === 'www')
-        ) {
-          return parts[parts.length - 2]
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, '');
-        }
-
-        // Otherwise take first part (remove zyapi/zy suffix)
-        let name = parts[0].toLowerCase();
-        name = name
-          .replace(/zyapi$/, '')
-          .replace(/zy$/, '')
-          .replace(/api$/, '');
-        return name.replace(/[^a-z0-9]/g, '') || 'source';
-      } catch {
-        return source.key || source.name.replace(/[^a-z0-9]/g, '');
-      }
-    };
-
-    const sourceId = extractSourceId(realApiUrl);
-    const proxiedApi = `${proxyBaseUrl}/p/${sourceId}?url=${encodeURIComponent(realApiUrl)}`;
+    const proxiedApi = buildProxiedApiUrl(
+      realApiUrl,
+      proxyBaseUrl,
+      source.key || source.name.replace(/[^a-z0-9]/g, '')
+    );
 
     console.log(`[Video Proxy] ${source.name}: ✓ Applied proxy`);
 
@@ -809,10 +862,44 @@ function applyVideoProxy(sites: ApiSite[], config: AdminConfig): ApiSite[] {
   });
 }
 
-export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
-  const config = await getConfig();
+function toApiSite(s: {
+  key: string;
+  name: string;
+  api: string;
+  detail?: string;
+  weight?: number;
+  tier?: 'stable' | 'deep' | 'fast';
+  from?: 'config' | 'custom';
+  disabled?: boolean;
+  is_adult?: boolean;
+  type?: 'vod' | 'shortdrama';
+  health?: 'valid' | 'no_results' | 'invalid';
+  healthCheckedAt?: number;
+  healthReason?: string;
+  probeMs?: number;
+  probeResources?: number;
+}): ApiSite {
+  return {
+    key: s.key,
+    name: s.name,
+    api: s.api,
+    detail: s.detail,
+    weight: s.weight,
+    tier: s.tier,
+    from: s.from,
+    disabled: s.disabled,
+    is_adult: s.is_adult,
+    type: s.type,
+    health: s.health,
+    healthCheckedAt: s.healthCheckedAt,
+    healthReason: s.healthReason,
+    probeMs: s.probeMs,
+    probeResources: s.probeResources,
+  };
+}
 
-  // 确定成人内容显示权限，优先级：用户 > 用户组 > 全局
+/** 成人内容权限，优先级：用户 > 用户组 > 全局。 */
+function resolveAdultPermission(config: AdminConfig, user?: string): boolean {
   let showAdultContent = config.SiteConfig.ShowAdultContent;
 
   if (user) {
@@ -854,10 +941,23 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
     }
   }
 
-  // 过滤掉禁用的源，如果未启用成人内容则同时过滤掉成人资源
+  return showAdultContent;
+}
+
+export async function getAvailableApiSites(user?: string, opts?: { adultChannel?: boolean }): Promise<ApiSite[]> {
+  const config = await getConfig();
+
+  // 成人频道：只返回成人源（需权限）；普通路径：永不混入成人源
+  if (opts?.adultChannel) {
+    if (!resolveAdultPermission(config, user)) return [];
+    const adultSites = config.SourceConfig.filter((s) => !s.disabled && s.is_adult);
+    return applyVideoProxy(adultSites.map(toApiSite), config);
+  }
+
+  // 普通路径永不混入成人源（成人内容只走 /adult 频道）
   const allApiSites = config.SourceConfig.filter((s) => {
     if (s.disabled) return false;
-    if (!showAdultContent && s.is_adult) return false;
+    if (s.is_adult) return false;
     return true;
   });
 
@@ -875,12 +975,7 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
     const userApiSitesSet = new Set(userConfig.enabledApis);
     const userSites = allApiSites
       .filter((s) => userApiSitesSet.has(s.key))
-      .map((s) => ({
-        key: s.key,
-        name: s.name,
-        api: s.api,
-        detail: s.detail,
-      }));
+      .map(toApiSite);
     return applyVideoProxy(userSites, config);
   }
 
@@ -901,12 +996,7 @@ export async function getAvailableApiSites(user?: string): Promise<ApiSite[]> {
     if (enabledApisFromTags.size > 0) {
       const tagSites = allApiSites
         .filter((s) => enabledApisFromTags.has(s.key))
-        .map((s) => ({
-          key: s.key,
-          name: s.name,
-          api: s.api,
-          detail: s.detail,
-        }));
+        .map(toApiSite);
       return applyVideoProxy(tagSites, config);
     }
   }

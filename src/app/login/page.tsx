@@ -9,10 +9,16 @@ import { Suspense, useEffect, useState } from 'react';
 
 import { CURRENT_VERSION } from '@/lib/version';
 import { checkForUpdates, UpdateStatus } from '@/lib/version_check';
+import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 
 import { useSite } from '@/components/SiteProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { OIDCProviderLogo, detectProvider, getProviderButtonStyle, getProviderButtonText } from '@/components/OIDCProviderLogos';
+import {
+  OIDCProviderLogo,
+  detectProvider,
+  getProviderButtonStyle,
+  getProviderButtonText,
+} from '@/components/OIDCProviderLogos';
 
 // 版本显示组件
 function VersionDisplay() {
@@ -35,18 +41,17 @@ function VersionDisplay() {
   }, []);
 
   return (
-    <div
-      className='absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400'
-    >
+    <div className='absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400'>
       <span className='font-mono'>v{CURRENT_VERSION}</span>
       {!isChecking && updateStatus !== UpdateStatus.FETCH_FAILED && (
         <div
-          className={`flex items-center gap-1.5 ${updateStatus === UpdateStatus.HAS_UPDATE
-            ? 'text-yellow-600 dark:text-yellow-400'
-            : updateStatus === UpdateStatus.NO_UPDATE
-              ? 'text-green-600 dark:text-green-400'
-              : ''
-            }`}
+          className={`flex items-center gap-1.5 ${
+            updateStatus === UpdateStatus.HAS_UPDATE
+              ? 'text-yellow-600 dark:text-yellow-400'
+              : updateStatus === UpdateStatus.NO_UPDATE
+                ? 'text-green-600 dark:text-green-400'
+                : ''
+          }`}
         >
           {updateStatus === UpdateStatus.HAS_UPDATE && (
             <>
@@ -70,7 +75,11 @@ function VersionDisplay() {
 function sanitizeRedirect(target: string | null): string {
   if (!target) return '/';
   // 必须是以单个 / 开头的站内路径（排除 //evil.com 与 /\\evil.com 这类协议相对地址）
-  if (!target.startsWith('/') || target.startsWith('//') || target.startsWith('/\\')) {
+  if (
+    !target.startsWith('/') ||
+    target.startsWith('//') ||
+    target.startsWith('/\\')
+  ) {
     return '/';
   }
   return target;
@@ -81,10 +90,24 @@ function LoginPageClient() {
   const searchParams = useSearchParams();
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const shouldAskUsername = process.env.NEXT_PUBLIC_STORAGE_TYPE !== 'localstorage';
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const shouldAskUsername =
+    process.env.NEXT_PUBLIC_STORAGE_TYPE !== 'localstorage';
   const [bingWallpaper, setBingWallpaper] = useState<string>('');
+
+  // 检查是否已登录，已登录则重定向
+  useEffect(() => {
+    const authInfo = getAuthInfoFromBrowserCookie();
+    if (authInfo?.username) {
+      const redirect = sanitizeRedirect(searchParams.get('redirect'));
+      router.replace(redirect);
+    } else {
+      setCheckingAuth(false);
+    }
+  }, [router, searchParams]);
 
   // Telegram Magic Link 状态
   const [telegramLoading, setTelegramLoading] = useState(false);
@@ -93,12 +116,14 @@ function LoginPageClient() {
   const [telegramUsername, setTelegramUsername] = useState('');
 
   // OIDC 登录状态
-  const [oidcProviders, setOidcProviders] = useState<Array<{
-    id: string;
-    name: string;
-    buttonText: string;
-    issuer: string;
-  }>>([]);
+  const [oidcProviders, setOidcProviders] = useState<
+    Array<{
+      id: string;
+      name: string;
+      buttonText: string;
+      issuer: string;
+    }>
+  >([]);
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [oidcButtonText, setOidcButtonText] = useState('使用OIDC登录');
   const [oidcIssuer, setOidcIssuer] = useState<string>('');
@@ -177,6 +202,7 @@ function LoginPageClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           password,
+          remember: rememberMe,
           ...(shouldAskUsername ? { username } : {}),
         }),
       });
@@ -188,7 +214,7 @@ function LoginPageClient() {
           await fetch('/api/user/my-stats', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ loginTime })
+            body: JSON.stringify({ loginTime }),
           });
           // 更新 localStorage 记录
           localStorage.setItem('lastRecordedLogin', loginTime.toString());
@@ -201,7 +227,9 @@ function LoginPageClient() {
         router.replace(redirect);
       } else {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? (res.status === 401 ? '密码错误' : '服务器错误'));
+        setError(
+          data.error ?? (res.status === 401 ? '密码错误' : '服务器错误'),
+        );
       }
     } catch (error) {
       setError('网络错误，请稍后重试');
@@ -224,7 +252,10 @@ function LoginPageClient() {
     setTelegramLoading(true);
 
     try {
-      console.log('[Frontend] Generating deep link for user:', telegramUsername);
+      console.log(
+        '[Frontend] Generating deep link for user:',
+        telegramUsername,
+      );
       const res = await fetch('/api/telegram/send-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -232,7 +263,11 @@ function LoginPageClient() {
       });
 
       const data = await res.json();
-      console.log('[Frontend] API response:', { ok: res.ok, status: res.status, data });
+      console.log('[Frontend] API response:', {
+        ok: res.ok,
+        status: res.status,
+        data,
+      });
 
       if (res.ok && data.deepLink) {
         setTelegramDeepLink(data.deepLink);
@@ -249,10 +284,30 @@ function LoginPageClient() {
     }
   };
 
-
+  // 正在检查认证状态时显示加载
+  if (checkingAuth) {
+    return (
+      <div
+        translate='no'
+        className='fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 py-8 sm:py-0 overflow-hidden bg-linear-to-br from-purple-100 via-blue-50 to-pink-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900'
+      >
+        <div className='relative z-10 w-full max-w-md rounded-2xl sm:rounded-3xl bg-linear-to-br from-white/95 via-white/85 to-white/75 dark:from-zinc-900/95 dark:via-zinc-900/85 dark:to-zinc-900/75 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.3)] dark:shadow-[0_20px_80px_rgba(0,0,0,0.6)] p-6 sm:p-10 border border-white/50 dark:border-zinc-700/50 animate-fade-in'>
+          <div className='flex items-center justify-center py-8'>
+            <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-green-600' />
+            <span className='ml-3 text-gray-600 dark:text-gray-400'>
+              正在验证登录状态...
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div translate="no" className='fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 py-8 sm:py-0 overflow-hidden bg-gradient-to-br from-purple-100 via-blue-50 to-pink-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900'>
+    <div
+      translate='no'
+      className='fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 py-8 sm:py-0 overflow-hidden bg-linear-to-br from-purple-100 via-blue-50 to-pink-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900'
+    >
       {/* Bing 每日壁纸背景 */}
       {bingWallpaper && (
         <div
@@ -262,44 +317,54 @@ function LoginPageClient() {
       )}
 
       {/* 渐变叠加层 */}
-      <div className='absolute inset-0 bg-gradient-to-br from-purple-600/40 via-blue-600/30 to-pink-500/40 dark:from-purple-900/50 dark:via-blue-900/40 dark:to-pink-900/50' />
-      <div className='absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/30' />
+      <div className='absolute inset-0 bg-linear-to-br from-purple-600/40 via-blue-600/30 to-pink-500/40 dark:from-purple-900/50 dark:via-blue-900/40 dark:to-pink-900/50' />
+      <div className='absolute inset-0 bg-linear-to-t from-black/50 via-transparent to-black/30' />
 
       <div className='absolute top-3 right-3 sm:top-4 sm:right-4 z-20'>
         <ThemeToggle />
       </div>
-      <div className='relative z-10 w-full max-w-md rounded-2xl sm:rounded-3xl bg-gradient-to-br from-white/95 via-white/85 to-white/75 dark:from-zinc-900/95 dark:via-zinc-900/85 dark:to-zinc-900/75 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.3)] dark:shadow-[0_20px_80px_rgba(0,0,0,0.6)] p-6 sm:p-10 border border-white/50 dark:border-zinc-700/50 animate-fade-in hover:shadow-[0_25px_100px_rgba(0,0,0,0.4)] transition-shadow duration-500'
+      <div
+        className='relative z-10 w-full max-w-md rounded-2xl sm:rounded-3xl bg-linear-to-br from-white/95 via-white/85 to-white/75 dark:from-zinc-900/95 dark:via-zinc-900/85 dark:to-zinc-900/75 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.3)] dark:shadow-[0_20px_80px_rgba(0,0,0,0.6)] p-6 sm:p-10 border border-white/50 dark:border-zinc-700/50 animate-fade-in hover:shadow-[0_25px_100px_rgba(0,0,0,0.4)] transition-shadow duration-500'
         style={{
           backgroundColor: 'rgba(255, 255, 255, 0.95)',
         }}
       >
         {/* Fallback for browsers without backdrop-filter support */}
         <style jsx>{`
-          @supports (backdrop-filter: blur(24px)) or (-webkit-backdrop-filter: blur(24px)) {
+          @supports (backdrop-filter: blur(24px)) or
+            (-webkit-backdrop-filter: blur(24px)) {
             div {
               background-color: transparent !important;
             }
           }
         `}</style>
         {/* 装饰性光效 */}
-        <div className='absolute -top-20 -left-20 w-40 h-40 bg-gradient-to-br from-purple-400/30 to-pink-400/30 rounded-full blur-3xl animate-pulse' />
-        <div className='absolute -bottom-20 -right-20 w-40 h-40 bg-gradient-to-br from-blue-400/30 to-cyan-400/30 rounded-full blur-3xl animate-pulse' style={{ animationDelay: '1s' }} />
+        <div className='absolute -top-20 -left-20 w-40 h-40 bg-linear-to-br from-purple-400/30 to-pink-400/30 rounded-full blur-3xl animate-pulse' />
+        <div
+          className='absolute -bottom-20 -right-20 w-40 h-40 bg-linear-to-br from-blue-400/30 to-cyan-400/30 rounded-full blur-3xl animate-pulse'
+          style={{ animationDelay: '1s' }}
+        />
 
         {/* 标题区域 */}
         <div className='text-center mb-6 sm:mb-8'>
-          <div className='inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 mb-3 sm:mb-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-500/50 dark:shadow-green-500/30'>
+          <div className='inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 mb-3 sm:mb-4 rounded-xl sm:rounded-2xl bg-linear-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-500/50 dark:shadow-green-500/30'>
             <Sparkles className='w-6 h-6 sm:w-8 sm:h-8 text-white' />
           </div>
-          <h1 className='text-transparent bg-clip-text bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 dark:from-green-400 dark:via-emerald-400 dark:to-teal-400 tracking-tight text-3xl sm:text-4xl font-extrabold mb-2 drop-shadow-sm'>
+          <h1 className='text-transparent bg-clip-text bg-linear-to-r from-green-600 via-emerald-600 to-teal-600 dark:from-green-400 dark:via-emerald-400 dark:to-teal-400 tracking-tight text-3xl sm:text-4xl font-extrabold mb-2 drop-shadow-sm'>
             {siteName}
           </h1>
-          <p className='text-gray-600 dark:text-gray-400 text-xs sm:text-sm font-medium'>欢迎回来，请登录您的账户</p>
+          <p className='text-gray-600 dark:text-gray-400 text-xs sm:text-sm font-medium'>
+            欢迎回来，请登录您的账户
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className='space-y-4 sm:space-y-6'>
           {shouldAskUsername && (
             <div className='group'>
-              <label htmlFor='username' className='block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2'>
+              <label
+                htmlFor='username'
+                className='block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2'
+              >
                 用户名
               </label>
               <div className='relative'>
@@ -320,7 +385,10 @@ function LoginPageClient() {
           )}
 
           <div className='group'>
-            <label htmlFor='password' className='block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2'>
+            <label
+              htmlFor='password'
+              className='block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2'
+            >
               密码
             </label>
             <div className='relative'>
@@ -340,21 +408,35 @@ function LoginPageClient() {
           </div>
 
           {error && (
-            <div role='alert' className='flex items-center gap-2 p-2.5 sm:p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 animate-shake-in'>
+            <div
+              role='alert'
+              className='flex items-center gap-2 p-2.5 sm:p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 animate-shake-in'
+            >
               <AlertCircle className='h-4 w-4 text-red-600 dark:text-red-400 shrink-0' />
-              <p className='text-xs sm:text-sm text-red-600 dark:text-red-400'>{error}</p>
+              <p className='text-xs sm:text-sm text-red-600 dark:text-red-400'>
+                {error}
+              </p>
             </div>
           )}
+
+          {/* 保持登录 */}
+          <label className='flex items-center gap-2 cursor-pointer select-none text-xs sm:text-sm text-gray-600 dark:text-gray-400'>
+            <input
+              type='checkbox'
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className='w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500'
+            />
+            保持登录（否则关闭浏览器后需重新登录）
+          </label>
 
           {/* 登录按钮 */}
           <button
             type='submit'
-            disabled={
-              !password || loading || (shouldAskUsername && !username)
-            }
-            className='group relative inline-flex w-full justify-center items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 py-2.5 sm:py-3.5 text-sm sm:text-base font-semibold text-white shadow-lg shadow-green-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-lg overflow-hidden active:scale-95'
+            disabled={!password || loading || (shouldAskUsername && !username)}
+            className='group relative inline-flex w-full justify-center items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl bg-linear-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 py-2.5 sm:py-3.5 text-sm sm:text-base font-semibold text-white shadow-lg shadow-green-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-lg overflow-hidden active:scale-95'
           >
-            <span className='absolute inset-0 w-full h-full bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000' />
+            <span className='absolute inset-0 w-full h-full bg-linear-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000' />
             <Lock className='h-4 w-4 sm:h-5 sm:w-5' />
             {loading ? '登录中...' : '立即登录'}
           </button>
@@ -368,11 +450,13 @@ function LoginPageClient() {
               <Link
                 href='/register'
                 prefetch={true}
-                className='group flex items-center justify-center gap-1.5 sm:gap-2 w-full px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800/50 text-green-700 dark:text-green-400 text-xs sm:text-sm font-semibold hover:from-green-100 hover:to-emerald-100 dark:hover:from-green-900/30 dark:hover:to-emerald-900/30 hover:border-green-300 dark:hover:border-green-700 transition-all duration-300 hover:shadow-md hover:scale-[1.02] active:scale-100'
+                className='group flex items-center justify-center gap-1.5 sm:gap-2 w-full px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg bg-linear-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800/50 text-green-700 dark:text-green-400 text-xs sm:text-sm font-semibold hover:from-green-100 hover:to-emerald-100 dark:hover:from-green-900/30 dark:hover:to-emerald-900/30 hover:border-green-300 dark:hover:border-green-700 transition-all duration-300 hover:shadow-md hover:scale-[1.02] active:scale-100'
               >
                 <UserPlus className='w-3.5 h-3.5 sm:w-4 sm:h-4' />
                 <span>立即注册</span>
-                <span className='inline-block transition-transform group-hover:translate-x-1'>→</span>
+                <span className='inline-block transition-transform group-hover:translate-x-1'>
+                  →
+                </span>
               </Link>
             </div>
           )}
@@ -411,9 +495,9 @@ function LoginPageClient() {
             <button
               onClick={handleTelegramLogin}
               disabled={telegramLoading || !telegramUsername.trim()}
-              className='group relative inline-flex w-full justify-center items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 py-2.5 sm:py-3.5 text-sm sm:text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-lg overflow-hidden active:scale-95'
+              className='group relative inline-flex w-full justify-center items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 py-2.5 sm:py-3.5 text-sm sm:text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-lg overflow-hidden active:scale-95'
             >
-              <span className='absolute inset-0 w-full h-full bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000' />
+              <span className='absolute inset-0 w-full h-full bg-linear-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000' />
               <Send className='h-4 w-4 sm:h-5 sm:w-5' />
               {telegramLoading ? '正在打开 Telegram...' : '通过 Telegram 登录'}
             </button>
@@ -459,18 +543,42 @@ function LoginPageClient() {
                 {oidcProviders.map((provider) => {
                   // 优先使用 provider.id，如果是自定义provider则从issuer推断
                   const providerId = provider.id.toLowerCase();
-                  const detectedProvider = ['google', 'github', 'microsoft', 'facebook', 'wechat', 'apple', 'linuxdo'].includes(providerId)
-                    ? (providerId as 'google' | 'github' | 'microsoft' | 'facebook' | 'wechat' | 'apple' | 'linuxdo')
+                  const detectedProvider = [
+                    'google',
+                    'github',
+                    'microsoft',
+                    'facebook',
+                    'wechat',
+                    'apple',
+                    'linuxdo',
+                  ].includes(providerId)
+                    ? (providerId as
+                        | 'google'
+                        | 'github'
+                        | 'microsoft'
+                        | 'facebook'
+                        | 'wechat'
+                        | 'apple'
+                        | 'linuxdo')
                     : detectProvider(provider.issuer || provider.buttonText);
                   const buttonStyle = getProviderButtonStyle(detectedProvider);
-                  const customText = provider.buttonText && provider.buttonText !== '使用OIDC登录' ? provider.buttonText : undefined;
-                  const buttonText = getProviderButtonText(detectedProvider, customText);
+                  const customText =
+                    provider.buttonText &&
+                    provider.buttonText !== '使用OIDC登录'
+                      ? provider.buttonText
+                      : undefined;
+                  const buttonText = getProviderButtonText(
+                    detectedProvider,
+                    customText,
+                  );
 
                   return (
                     <button
                       key={provider.id}
                       type='button'
-                      onClick={() => window.location.href = `/api/auth/oidc/login?provider=${provider.id}`}
+                      onClick={() =>
+                        (window.location.href = `/api/auth/oidc/login?provider=${provider.id}`)
+                      }
                       className={`w-full inline-flex justify-center items-center rounded-lg py-2.5 sm:py-3 text-sm sm:text-base font-semibold shadow-sm transition-all duration-200 active:scale-95 ${buttonStyle}`}
                     >
                       <OIDCProviderLogo provider={detectedProvider} />
@@ -484,13 +592,18 @@ function LoginPageClient() {
               (() => {
                 const provider = detectProvider(oidcIssuer || oidcButtonText);
                 const buttonStyle = getProviderButtonStyle(provider);
-                const customText = oidcButtonText && oidcButtonText !== '使用OIDC登录' ? oidcButtonText : undefined;
+                const customText =
+                  oidcButtonText && oidcButtonText !== '使用OIDC登录'
+                    ? oidcButtonText
+                    : undefined;
                 const buttonText = getProviderButtonText(provider, customText);
 
                 return (
                   <button
                     type='button'
-                    onClick={() => window.location.href = '/api/auth/oidc/login'}
+                    onClick={() =>
+                      (window.location.href = '/api/auth/oidc/login')
+                    }
                     className={`mt-3 sm:mt-4 w-full inline-flex justify-center items-center rounded-lg py-2.5 sm:py-3 text-sm sm:text-base font-semibold shadow-sm transition-all duration-200 active:scale-95 ${buttonStyle}`}
                   >
                     <OIDCProviderLogo provider={provider} />

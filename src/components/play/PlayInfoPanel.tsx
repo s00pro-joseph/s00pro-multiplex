@@ -18,11 +18,6 @@ interface PlayInfoPanelProps {
   currentEpisodeIndex: number;
   episodeName?: string;
   backdropUrl?: string | null;
-  tmdbPoster?: string | null;
-  tmdbOverview?: string | null;
-  tmdbRating?: number | null;
-  tmdbLogo?: string | null;
-  tmdbNumberOfSeasons?: number | null;
   favorited: boolean;
   onToggleFavorite: () => void;
   detail?: any;
@@ -46,7 +41,7 @@ interface PlayInfoPanelProps {
 export default function PlayInfoPanel(props: PlayInfoPanelProps) {
   const {
     title, year, cover, sourceName, totalEpisodes, currentEpisodeIndex,
-    episodeName, backdropUrl, tmdbPoster, tmdbOverview, tmdbRating, tmdbLogo, tmdbNumberOfSeasons,
+    episodeName, backdropUrl,
     favorited, onToggleFavorite,
     detail, movieDetails, bangumiDetails, shortdramaDetails,
     movieComments, commentsError, loadingMovieDetails, loadingBangumiDetails,
@@ -59,12 +54,9 @@ export default function PlayInfoPanel(props: PlayInfoPanelProps) {
   const [indicator, setIndicator] = useState({ x: 0, width: 0, ready: false });
 
   const bgUrl = backdropUrl || (cover ? processImageUrl(cover) : null);
-  // TMDB poster 优先，没有则用封面
-  const posterUrl = tmdbPoster || (cover ? processImageUrl(cover) : null);
-  // 简介：TMDB 优先
-  const overview = tmdbOverview || movieDetails?.plot_summary || bangumiDetails?.summary || shortdramaDetails?.desc || detail?.desc;
-  // 评分：TMDB 优先
-  const displayRating = tmdbRating || (movieDetails?.rate ? parseFloat(movieDetails.rate) : null) || (bangumiDetails?.rating?.score ? parseFloat(bangumiDetails.rating.score) : null);
+  const posterUrl = cover ? processImageUrl(cover) : null;
+  const overview = movieDetails?.plot_summary || bangumiDetails?.summary || shortdramaDetails?.desc || detail?.desc;
+  const displayRating = (movieDetails?.rate ? parseFloat(movieDetails.rate) : null) || (bangumiDetails?.rating?.score ? parseFloat(bangumiDetails.rating.score) : null);
 
   const hasCast = (movieDetails?.celebrities?.length ?? 0) > 0 &&
     movieDetails.celebrities.some((c: any) => c.avatar);
@@ -140,7 +132,7 @@ export default function PlayInfoPanel(props: PlayInfoPanelProps) {
                   ★ {displayRating.toFixed(1)}
                 </span>
               )}
-              {bangumiDetails?.rating?.score && !tmdbRating && parseFloat(bangumiDetails.rating.score) > 0 && (
+              {bangumiDetails?.rating?.score && parseFloat(bangumiDetails.rating.score) > 0 && (
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-pink-500/80 text-white font-medium">
                   ★ {parseFloat(bangumiDetails.rating.score).toFixed(1)}
                 </span>
@@ -155,25 +147,14 @@ export default function PlayInfoPanel(props: PlayInfoPanelProps) {
                   {episodeText}
                 </span>
               )}
-              {tmdbNumberOfSeasons && tmdbNumberOfSeasons > 1 && (
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/15 text-white/90 border border-white/20">
-                  共 {tmdbNumberOfSeasons} 季
-                </span>
-              )}
             </div>
 
-            {/* 标题 — 有 TMDB logo 就显示图片，没有就显示文字 */}
-            {tmdbLogo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={tmdbLogo} alt={title}
-                className="max-h-16 sm:max-h-20 md:max-h-28 w-auto max-w-[60%] object-contain drop-shadow-lg" />
-            ) : (
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white leading-tight line-clamp-2">
-                {title}
-              </h1>
-            )}
+            {/* 标题 */}
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white leading-tight line-clamp-2">
+              {title}
+            </h1>
 
-            {/* 简介 — TMDB 优先 */}
+            {/* 简介 */}
             {overview && (
               <p className="text-sm text-white/80 leading-relaxed line-clamp-2 md:line-clamp-3 max-w-2xl">
                 {overview}
@@ -414,9 +395,7 @@ function CastTab({ movieDetails, loadingCelebrityWorks, selectedCelebrityName,
           ) : celebrityWorks.length > 0 ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
               {celebrityWorks.map((work: any) => {
-                const url = work.source === 'tmdb'
-                  ? `/play?title=${encodeURIComponent(work.title)}&prefer=true`
-                  : `/play?title=${encodeURIComponent(work.title)}&douban_id=${work.id}&prefer=true`;
+                const url = `/play?title=${encodeURIComponent(work.title)}&douban_id=${work.id}&prefer=true`;
                 return (
                   <a key={work.id} href={url}>
                     <VideoCard id={work.id} title={work.title} poster={work.poster}

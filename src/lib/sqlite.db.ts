@@ -32,7 +32,9 @@ export class SqliteStorage implements IStorage {
 
   constructor() {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: new (path: string) => any };
+    const { DatabaseSync } = require('node:sqlite') as {
+      DatabaseSync: new (path: string) => any;
+    };
 
     const isBuild = process.env.IS_BUILD_PHASE === 'true';
 
@@ -166,17 +168,21 @@ export class SqliteStorage implements IStorage {
         last_login_os TEXT
       );
 
-      CREATE TABLE IF NOT EXISTS emby_configs (
-        username TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-
       CREATE TABLE IF NOT EXISTS crash_logs (
         timestamp TEXT PRIMARY KEY,
         value TEXT NOT NULL,
         created_at INTEGER NOT NULL
       );
     `);
+
+    // 密码版本列（密码修改即 bump，旧签发 cookie 全网失效）
+    try {
+      this.db.exec(
+        'ALTER TABLE users ADD COLUMN pwd_version INTEGER NOT NULL DEFAULT 0',
+      );
+    } catch {
+      // 列已存在
+    }
 
     console.log('[SQLite] 数据表初始化完成');
   }
@@ -398,8 +404,27 @@ export class SqliteStorage implements IStorage {
   async changePassword(userName: string, newPassword: string): Promise<void> {
     const hashed = hashPwd(newPassword);
     this.db
-      .prepare('UPDATE users SET password_hash = ? WHERE username = ?')
+      .prepare(
+        'UPDATE users SET password_hash = ?, pwd_version = pwd_version + 1 WHERE username = ?',
+      )
       .run(hashed, userName);
+  }
+
+  async getPwdVersion(userName: string): Promise<number> {
+    const row = this.db
+      .prepare('SELECT pwd_version FROM users WHERE username = ?')
+      .get(userName) as { pwd_version: number } | undefined;
+    return row?.pwd_version ?? 0;
+  }
+
+  async hasAnyOwner(): Promise<boolean> {
+    // 环境变量站长
+    if (process.env.USERNAME && process.env.PASSWORD) return true;
+    // 数据库站长（users_v2 role=owner）
+    const row = this.db
+      .prepare("SELECT 1 FROM users_v2 WHERE role = 'owner' LIMIT 1")
+      .get();
+    return !!row;
   }
 
   async deleteUser(userName: string): Promise<void> {
@@ -426,9 +451,6 @@ export class SqliteStorage implements IStorage {
         .run(userName);
       this.db
         .prepare('DELETE FROM login_stats WHERE username = ?')
-        .run(userName);
-      this.db
-        .prepare('DELETE FROM emby_configs WHERE username = ?')
         .run(userName);
       this.db.exec('COMMIT');
     } catch (e) {
@@ -769,7 +791,6 @@ export class SqliteStorage implements IStorage {
       'admin_config',
       'cache',
       'login_stats',
-      'emby_configs',
       'crash_logs',
     ];
     this.db.exec('BEGIN');
@@ -1201,7 +1222,13 @@ export class SqliteStorage implements IStorage {
     userName: string,
     loginTime: number,
     isFirstLogin?: boolean,
-    loginMeta?: { ip?: string; location?: string; device?: string; browser?: string; os?: string }
+    loginMeta?: {
+      ip?: string;
+      location?: string;
+      device?: string;
+      browser?: string;
+      os?: string;
+    },
   ): Promise<void> {
     const row = this.db
       .prepare('SELECT * FROM login_stats WHERE username = ?')
@@ -1227,36 +1254,39 @@ export class SqliteStorage implements IStorage {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
-        userName, loginCount, firstLoginTime, loginTime, loginTime,
-        loginMeta?.ip ?? (row?.last_login_ip ?? null),
-        loginMeta?.location ?? (row?.last_login_location ?? null),
-        loginMeta?.device ?? (row?.last_login_device ?? null),
-        loginMeta?.browser ?? (row?.last_login_browser ?? null),
-        loginMeta?.os ?? (row?.last_login_os ?? null),
+        userName,
+        loginCount,
+        firstLoginTime,
+        loginTime,
+        loginTime,
+        loginMeta?.ip ?? row?.last_login_ip ?? null,
+        loginMeta?.location ?? row?.last_login_location ?? null,
+        loginMeta?.device ?? row?.last_login_device ?? null,
+        loginMeta?.browser ?? row?.last_login_browser ?? null,
+        loginMeta?.os ?? row?.last_login_os ?? null,
       );
   }
 
-  // ==================== Emby 配置 ====================
-
-  async getUserEmbyConfig(userName: string): Promise<any | null> {
-    const row = this.db
-      .prepare('SELECT value FROM emby_configs WHERE username = ?')
-      .get(userName) as { value: string } | undefined;
-    return row ? JSON.parse(row.value) : null;
-  }
-
-  async saveUserEmbyConfig(userName: string, config: any): Promise<void> {
+  async updateUserStats(userName: string, stats: UserPlayStat): Promise<void> {
     this.db
       .prepare(
-        'INSERT OR REPLACE INTO emby_configs (username, value) VALUES (?, ?)',
+        `INSERT OR REPLACE INTO login_stats
+         (username, login_count, first_login_time, last_login_time, last_login_date,
+          last_login_ip, last_login_location, last_login_device, last_login_browser, last_login_os)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(userName, JSON.stringify(config));
-  }
-
-  async deleteUserEmbyConfig(userName: string): Promise<void> {
-    this.db
-      .prepare('DELETE FROM emby_configs WHERE username = ?')
-      .run(userName);
+      .run(
+        userName,
+        stats.loginCount ?? 0,
+        stats.firstLoginTime ?? null,
+        stats.lastLoginTime ?? null,
+        stats.lastLoginDate ?? null,
+        stats.lastLoginIp ?? null,
+        stats.lastLoginLocation ?? null,
+        stats.lastLoginDevice ?? null,
+        stats.lastLoginBrowser ?? null,
+        stats.lastLoginOs ?? null,
+      );
   }
 
   // ==================== 崩溃日志 ====================

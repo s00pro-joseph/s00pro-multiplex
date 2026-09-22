@@ -29,7 +29,6 @@ import { parseCustomTimeFormat } from '@/lib/time';
 
 import EpgScrollableRow from '@/components/EpgScrollableRow';
 import PageLayout from '@/components/PageLayout';
-import { useLiveSync } from '@/hooks/useLiveSync';
 import { useTabsDragScroll } from '@/hooks/useTabsDragScroll';
 import { useInView } from '@/hooks/useInView';
 
@@ -423,40 +422,8 @@ function LivePageClient() {
   const groupButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const channelListRef = useRef<HTMLDivElement>(null);
 
-  // 观影室同步 - 房主切换频道时广播，房员接收并同步
-  const liveSync = useLiveSync({
-    currentChannelId: currentChannel?.id || '',
-    currentChannelName: currentChannel?.name || '',
-    currentSourceKey: currentSource?.key || '',
-    onChannelChange: (channelId: string, sourceKey: string) => {
-      // 房员接收到频道切换指令
-      console.log('[Live] Received channel change from owner:', { channelId, sourceKey });
-
-      // 1. 先切换直播源（如果不同）
-      if (sourceKey && sourceKey !== currentSourceRef.current?.key) {
-        const targetSource = liveSources.find(s => s.key === sourceKey);
-        if (targetSource) {
-          // 这里需要先加载直播源的频道列表，然后再切换频道
-          // 由于 loadChannels 是异步的，我们需要等待加载完成后再切换频道
-          setCurrentSource(targetSource);
-          // 保存需要切换的频道ID，在频道列表加载完成后自动切换
-          setPendingSyncChannelId(channelId);
-          return;
-        }
-      }
-
-      // 2. 切换频道（同一直播源）
-      const targetChannel = currentChannels.find(c => c.id === channelId);
-      if (targetChannel) {
-        setCurrentChannel(targetChannel);
-        setVideoUrl(targetChannel.url);
-        // 自动滚动到选中的频道位置
-        setTimeout(() => {
-          scrollToChannel(targetChannel);
-        }, 100);
-      }
-    },
-  });
+  // 本地播放（无房间同步）
+  const liveSync = { shouldDisableControls: false };
 
   // 拖拽滚动功能
   const { isDragging, dragHandlers } = useTabsDragScroll();

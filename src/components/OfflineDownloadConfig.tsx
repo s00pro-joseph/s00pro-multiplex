@@ -16,12 +16,17 @@ const DownloadConfig: React.FC<DownloadConfigProps> = ({
   refreshConfig,
 }) => {
   const [enabled, setEnabled] = useState(true);
+  const [allowStreamMode, setAllowStreamMode] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     if (config?.DownloadConfig) {
       setEnabled(config.DownloadConfig.enabled ?? true);
+      setAllowStreamMode(config.DownloadConfig.allowStreamMode ?? true);
     }
   }, [config]);
 
@@ -33,7 +38,7 @@ const DownloadConfig: React.FC<DownloadConfigProps> = ({
       const response = await fetch('/api/admin/download-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled }),
+        body: JSON.stringify({ enabled, allowStreamMode }),
       });
 
       if (!response.ok) {
@@ -73,7 +78,10 @@ const DownloadConfig: React.FC<DownloadConfigProps> = ({
       {/* 功能说明 */}
       <div className='p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800'>
         <div className='flex items-start gap-3'>
-          <Download className='text-blue-600 dark:text-blue-400 shrink-0 mt-1' size={20} />
+          <Download
+            className='text-blue-600 dark:text-blue-400 shrink-0 mt-1'
+            size={20}
+          />
           <div>
             <h3 className='text-sm font-semibold text-gray-900 dark:text-white mb-2'>
               M3U8客户端下载功能
@@ -110,6 +118,33 @@ const DownloadConfig: React.FC<DownloadConfigProps> = ({
           <span
             className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
               enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* StreamSaver 模式开关 */}
+      <div className='flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg'>
+        <div>
+          <h3 className='text-lg font-semibold text-gray-900 dark:text-white'>
+            允许 StreamSaver 模式
+          </h3>
+          <p className='text-sm text-gray-600 dark:text-gray-400 mt-1'>
+            允许用户使用 Service Worker /
+            文件系统直写模式（需浏览器支持）。关闭则强制使用普通模式。
+          </p>
+        </div>
+        <button
+          onClick={() => setAllowStreamMode(!allowStreamMode)}
+          className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+            allowStreamMode
+              ? 'bg-green-600 dark:bg-green-600'
+              : 'bg-gray-200 dark:bg-gray-700'
+          }`}
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+              allowStreamMode ? 'translate-x-6' : 'translate-x-1'
             }`}
           />
         </button>

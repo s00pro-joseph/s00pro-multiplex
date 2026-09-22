@@ -70,7 +70,6 @@ export default function PerformanceMonitor() {
       '/api/search': '视频搜索',
       '/api/source-browser/list': '视频列表',
       '/api/detail': '视频详情',
-      '/api/danmu-external': '弹幕获取',
       '/api/admin': '管理后台',
     };
 
@@ -117,7 +116,6 @@ export default function PerformanceMonitor() {
       if (apiFilter === 'search') return req.path.startsWith('/api/search');
       if (apiFilter === 'list') return req.path.startsWith('/api/source-browser/list');
       if (apiFilter === 'detail') return req.path.startsWith('/api/detail');
-      if (apiFilter === 'danmu') return req.path.startsWith('/api/danmu-external');
       return true;
     });
   };
@@ -381,7 +379,6 @@ export default function PerformanceMonitor() {
             <option value='search'>视频搜索</option>
             <option value='list'>视频列表</option>
             <option value='detail'>视频详情</option>
-            <option value='danmu'>弹幕获取</option>
             <option value='favorites'>收藏管理</option>
             <option value='playrecords'>播放记录</option>
             <option value='skipconfigs'>跳过配置</option>

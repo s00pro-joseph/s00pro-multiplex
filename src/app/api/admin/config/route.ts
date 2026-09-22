@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
 
 import { AdminConfig, AdminConfigResult } from '@/lib/admin.types';
 import { getAuthInfoFromCookie } from '@/lib/auth';
@@ -29,6 +30,19 @@ export async function GET(request: NextRequest) {
 
   try {
     const config = await getConfig();
+
+    // 轻量版本指纹：管理页轮询用，配置有任何变化指纹即变
+    if (request.nextUrl.searchParams.get('rev') === '1') {
+      const rev = createHash('sha256')
+        .update(JSON.stringify(config))
+        .digest('hex')
+        .slice(0, 16);
+      return NextResponse.json(
+        { rev },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+
     const result: AdminConfigResult = {
       Role: 'owner',
       Config: config,

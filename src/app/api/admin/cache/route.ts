@@ -85,7 +85,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const cacheType = searchParams.get('type'); // all, douban, shortdrama, danmu, netdisk, youtube, search
+  const cacheType = searchParams.get('type'); // all, douban, shortdrama, netdisk, youtube, search
   
   try {
     let clearedCount = 0;
@@ -107,16 +107,6 @@ export async function DELETE(request: NextRequest) {
         message = `已清理 ${clearedCount} 个短剧缓存项`;
         break;
 
-      case 'tmdb':
-        clearedCount = await clearTmdbCache();
-        message = `已清理 ${clearedCount} 个TMDB缓存项`;
-        break;
-
-      case 'danmu':
-        clearedCount = await clearDanmuCache();
-        message = `已清理 ${clearedCount} 个弹幕缓存项`;
-        break;
-      
       case 'netdisk':
         clearedCount = await clearNetdiskCache();
         message = `已清理 ${clearedCount} 个网盘搜索缓存项`;
@@ -184,8 +174,6 @@ async function getCacheStats() {
       douban: { count: 0, size: 0, types: {} },
       bangumi: { count: 0, size: 0, types: {} },
       shortdrama: { count: 0, size: 0, types: {} },
-      tmdb: { count: 0, size: 0, types: {} },
-      danmu: { count: 0, size: 0 },
       netdisk: { count: 0, size: 0 },
       youtube: { count: 0, size: 0 },
       bilibili: { count: 0, size: 0 },
@@ -198,8 +186,6 @@ async function getCacheStats() {
       formattedSizes: {
         douban: '0 B',
         shortdrama: '0 B',
-        tmdb: '0 B',
-        danmu: '0 B',
         netdisk: '0 B',
         youtube: '0 B',
         bilibili: '0 B',
@@ -262,52 +248,6 @@ async function clearShortdramaCache(): Promise<number> {
       clearedCount++;
     });
     console.log(`🗑️ localStorage中清理了 ${keys.length} 个短剧缓存项`);
-  }
-
-  return clearedCount;
-}
-
-// 清理TMDB缓存
-async function clearTmdbCache(): Promise<number> {
-  let clearedCount = 0;
-
-  // 清理数据库中的TMDB缓存
-  const dbCleared = await DatabaseCacheManager.clearCacheByType('tmdb');
-  clearedCount += dbCleared;
-
-  // 清理localStorage中的TMDB缓存（兜底）
-  if (typeof localStorage !== 'undefined') {
-    const keys = Object.keys(localStorage).filter(key =>
-      key.startsWith('tmdb-')
-    );
-    keys.forEach(key => {
-      localStorage.removeItem(key);
-      clearedCount++;
-    });
-    console.log(`🗑️ localStorage中清理了 ${keys.length} 个TMDB缓存项`);
-  }
-
-  return clearedCount;
-}
-
-// 清理弹幕缓存
-async function clearDanmuCache(): Promise<number> {
-  let clearedCount = 0;
-  
-  // 清理数据库中的弹幕缓存
-  const dbCleared = await DatabaseCacheManager.clearCacheByType('danmu');
-  clearedCount += dbCleared;
-
-  // 清理localStorage中的弹幕缓存（兜底）
-  if (typeof localStorage !== 'undefined') {
-    const keys = Object.keys(localStorage).filter(key => 
-      key.startsWith('danmu-cache') || key === 'lunatv_danmu_cache'
-    );
-    keys.forEach(key => {
-      localStorage.removeItem(key);
-      clearedCount++;
-    });
-    console.log(`🗑️ localStorage中清理了 ${keys.length} 个弹幕缓存项`);
   }
 
   return clearedCount;
@@ -460,14 +400,12 @@ async function clearAllCache(): Promise<number> {
   const doubanCount = await clearDoubanCache();
   const bangumiCount = await clearBangumiCache();
   const shortdramaCount = await clearShortdramaCache();
-  const tmdbCount = await clearTmdbCache();
-  const danmuCount = await clearDanmuCache();
   const netdiskCount = await clearNetdiskCache();
   const youtubeCount = await clearYouTubeCache();
   const bilibiliCount = await clearBilibiliCache();
   const searchCount = await clearSearchCache();
 
-  return doubanCount + bangumiCount + shortdramaCount + tmdbCount + danmuCount + netdiskCount + youtubeCount + bilibiliCount + searchCount;
+  return doubanCount + bangumiCount + shortdramaCount + netdiskCount + youtubeCount + bilibiliCount + searchCount;
 }
 
 // 格式化字节大小

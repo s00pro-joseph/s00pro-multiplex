@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { fetchFirst } from '@/lib/fetch-chain';
+
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
@@ -9,16 +11,18 @@ export async function GET(request: NextRequest) {
   if (!q) return NextResponse.json([]);
 
   try {
-    const res = await fetch(
-      `https://movie.douban.com/j/subject_suggest?q=${encodeURIComponent(q)}`,
+    // 直连优先，备用 host 兜底
+    const path = `/j/subject_suggest?q=${encodeURIComponent(q)}`;
+    const { res } = await fetchFirst(
+      [`https://movie.douban.com${path}`, `https://m.douban.com${path}`],
       {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
           'Referer': 'https://movie.douban.com/',
           'Accept': 'application/json',
         },
-        signal: AbortSignal.timeout(5000),
-      }
+        timeoutMs: 5000,
+      },
     );
     if (!res.ok) return NextResponse.json([]);
     const data = await res.json();
